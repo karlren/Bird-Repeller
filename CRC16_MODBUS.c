@@ -89,9 +89,11 @@ uint8_t g_command[][8] = {  {},
 **********************************************************/
 int crc16_modbus(uint8_t *data, uint8_t length)
 {
+    int detection = 0;
     if ((data[length-2] == 0) && (data[length-1] == 0))
     {
 //        printf("CRC detection!\n");
+        detection = 1;
         length -= 2;
     }
     uint16_t uCRC = 0xFFFF;             /* 初始值为0xFFFF */
@@ -111,8 +113,11 @@ int crc16_modbus(uint8_t *data, uint8_t length)
             }
         }
     }
-    data[6] = uCRC & 0x00FF;            /* 取出CRC校验结果的低八位 */
-    data[7] = (uCRC & 0xFF00) >> 8;     /* 取出CRC校验结果的高八位 */
+    if (detection) {
+        data[length] = uCRC & 0x00FF;            /* 取出CRC校验结果的低八位 */
+        data[length+1] = (uCRC & 0xFF00) >> 8;     /* 取出CRC校验结果的高八位 */
+    }
+
     return uCRC == 0;
 }
 /********************************************************
@@ -135,7 +140,7 @@ void Command_Copy(uint8_t *destination, uint8_t *source)
  * Parameter         :
  * @destination      :   被复制的数组地址
  * @source           :   复制的源数组地址
- * Return            :   NULL
+ * Return            :   最终发送的控制指令数组
 **********************************************************/
 uint8_t* Control(uint8_t operand, uint8_t data1, uint8_t data2)
 {
