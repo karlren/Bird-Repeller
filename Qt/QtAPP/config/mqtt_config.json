@@ -1,0 +1,6 @@
+{
+    "mqttPassword": "123456",
+    "mqttServerAddr": "139.9.223.99",
+    "mqttServerPort": 1883,
+    "mqttUsername": "qt"
+}

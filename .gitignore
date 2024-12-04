@@ -1,0 +1,20 @@
+
+# 忽略编译生成的中间文件
+*.o
+*.obj
+*.a
+*.lib
+*.lo
+*.la
+*.s
+*.exe
+*.so
+*.dylib
+
+# 忽略vscode生成的配置文件
+**/.vscode/
+
+# 忽略Qt生成的编译目录
+build-*/
+
+!**/QtAPP/
