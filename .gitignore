@@ -7,7 +7,6 @@
 *.lo
 *.la
 *.s
-*.exe
 *.so
 *.dylib
 
@@ -18,3 +17,6 @@
 build-*/
 
 !**/QtAPP/
+
+*.doc
+*.docx
