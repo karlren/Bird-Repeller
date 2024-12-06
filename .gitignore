@@ -9,6 +9,11 @@
 *.s
 *.so
 *.dylib
+*.bin
+*.elf
+*.map
+# 保留Arduino生成的bin文件
+!*.ino.bin
 
 # 忽略vscode生成的配置文件
 **/.vscode/
@@ -20,3 +25,6 @@ build-*/
 
 *.doc
 *.docx
+*.xlsx
+GPT/
+**/mainwindows.ui
