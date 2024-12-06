@@ -48,39 +48,13 @@ MainWindow::MainWindow(QWidget *parent)
     inquireButton->setGeometry(450, 100, 150, 80);
     connect(inquireButton, &QPushButton::clicked, this, &MainWindow::inquireButton_clicked);
 
-    /* 设备选择按钮 */
-    allDeviceRadioButton = new QRadioButton("所有设备", this);
-    firstDeviceRadioButton = new QRadioButton("设备1", this);
-    secondDeviceRadioButton = new QRadioButton("设备2", this);
-    thirdDeviceRadioButton = new QRadioButton("设备3", this);
-
-    allDeviceRadioButton->setText("所有设备");
-    firstDeviceRadioButton->setText("设备1");
-    secondDeviceRadioButton->setText("设备2");
-    thirdDeviceRadioButton->setText("设备3");
-
-    deviceGroup = new QButtonGroup(this);
-    deviceGroup->addButton(allDeviceRadioButton, 0);
-    deviceGroup->addButton(firstDeviceRadioButton, 1);
-    deviceGroup->addButton(secondDeviceRadioButton, 2);
-    deviceGroup->addButton(thirdDeviceRadioButton, 3);
-
-    QVBoxLayout *deviceLayout = new QVBoxLayout;
-    deviceLayout->addWidget(allDeviceRadioButton);
-    deviceLayout->addWidget(firstDeviceRadioButton);
-    deviceLayout->addWidget(secondDeviceRadioButton);
-    deviceLayout->addWidget(thirdDeviceRadioButton);
-
-    // 设置每个 QRadioButton 的大小
-    allDeviceRadioButton->setGeometry(50, 130, 180, 50);
-    firstDeviceRadioButton->setGeometry(50, 180, 150, 50);
-    secondDeviceRadioButton->setGeometry(50, 230, 150, 50);
-    thirdDeviceRadioButton->setGeometry(50, 280, 150, 50);
-
-    // 设置布局的间距和边距
-    deviceLayout->setSpacing(100);  // 设置按钮之间的间距
-
-    firstDeviceRadioButton->setChecked(true);
+    deviceComboBox = new QComboBox(this);
+    deviceComboBox->addItem("所有设备");
+    for (int i = 1; i <= 5; ++i) {
+        deviceComboBox->addItem(QString("设备%1").arg(i));
+    }
+    deviceComboBox->setGeometry(50, 130, 180, 50);
+    deviceComboBox->setCurrentIndex(1);
 
     /* 云台控制按键 */
     upButton = new QPushButton("↑", this);
@@ -145,24 +119,30 @@ MainWindow::MainWindow(QWidget *parent)
 
     /* 云台水平、俯仰角度控制 */
     PTSetPanAngleLabel = new QLabel("云台水平角度：", this);
-    PTSetPanAngleLabel->setGeometry(720, 300, 200, 60);
+    PTSetPanAngleLabel->setGeometry(720, 220, 200, 60);
     PTSetPanAngleDoubleSpinBox = new QDoubleSpinBox(this);
-    PTSetPanAngleDoubleSpinBox->setGeometry(900, 300, 150, 60);
+    PTSetPanAngleDoubleSpinBox->setGeometry(880, 220, 150, 60);
     PTSetPanAngleDoubleSpinBox->setRange(-60.00, 60.00);
     PTSetPanAngleDoubleSpinBox->setSingleStep(0.5);
     PTSetPanAngleDoubleSpinBox->setValue(0.0);
     PTSetPanAngleButton = new QPushButton("设置", this);
-    PTSetPanAngleButton->setGeometry(1050, 300, 120, 60);
+    PTSetPanAngleButton->setGeometry(1050, 220, 120, 60);
 
     PTSetTiltAngleLabel = new QLabel("云台俯仰角度：", this);
-    PTSetTiltAngleLabel->setGeometry(720, 360, 200, 60);
+    PTSetTiltAngleLabel->setGeometry(720, 280, 200, 60);
     PTSetTiltAngleDoubleSpinBox = new QDoubleSpinBox(this);
-    PTSetTiltAngleDoubleSpinBox->setGeometry(900, 360, 150, 60);
+    PTSetTiltAngleDoubleSpinBox->setGeometry(880, 280, 150, 60);
     PTSetTiltAngleDoubleSpinBox->setRange(-20.00, 90.00);
     PTSetTiltAngleDoubleSpinBox->setSingleStep(0.5);
     PTSetTiltAngleDoubleSpinBox->setValue(0.0);
     PTSetTiltAngleButton = new QPushButton("设置", this);
-    PTSetTiltAngleButton->setGeometry(1050, 360, 120, 60);
+    PTSetTiltAngleButton->setGeometry(1050, 280, 120, 60);
+
+    /* 消息返回 */
+    messageReturnLabel = new QLabel("消息返回", this);
+    messageReturnLabel->setGeometry(750, 380, 150, 50);
+    recvMessagesPlainTextEdit = new QPlainTextEdit(this);
+    recvMessagesPlainTextEdit->setGeometry(750, 430, 400, 150);
 
     connect(PTSetPanAngleButton, &QPushButton::clicked, this, &MainWindow::PTSetPanAngleButton_clicked);
     connect(PTSetTiltAngleButton, &QPushButton::clicked, this, &MainWindow::PTSetTiltAngleButton_clicked);
@@ -171,9 +151,6 @@ MainWindow::MainWindow(QWidget *parent)
     connect(pMqttClient, &QMqttClient::stateChanged, this, &MainWindow::updateLogStateChange);
     /* 连接客户端订阅消息信号 */
     connect(pMqttClient, &QMqttClient::messageReceived, this, &MainWindow::recv_message);
-    /* 连接设备选择按键组信号 */
-    connect(deviceGroup, QOverload<int>::of(&QButtonGroup::buttonClicked),
-            this, &MainWindow::deviceButton_clicked);
     /* 连接云台控制按键组信号 */
     connect(PTcontrolButtonGruop, QOverload<int>::of(&QButtonGroup::buttonClicked),
             this, &MainWindow::PTcontrolButton_clicked);
@@ -186,19 +163,10 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
-int MainWindow::get_now_deviceID()
-{
-    QAbstractButton *selectedButton = deviceGroup->checkedButton();
-    if (!selectedButton) {
-        return -1;
-    }
-    return deviceGroup->id(selectedButton);
-}
-
 bool MainWindow::send_mqtt_command(const QString &method, QJsonObject params, int id)
 {
     QString topic = "esp32/control";
-    int deviceID = get_now_deviceID();
+    int deviceID = deviceComboBox->currentIndex();
     if (deviceID == -1) {
         QMessageBox::warning(NULL, "警告", "未选择设备");
         return false;
@@ -241,11 +209,15 @@ void MainWindow::updateLogStateChange()
 void MainWindow::recv_message(const QByteArray &message, const QMqttTopicName &topic)
 {
 //    qDebug()<<message<<"\n"<<topic.name();
-    int deviceID = get_now_deviceID();      /* 获取当前选择的设备 */
+    int deviceID = deviceComboBox->currentIndex();      /* 获取当前选择的设备 */
     if (topic.name() == "esp32/result") {
         QJsonDocument recvMessageDoc = QJsonDocument::fromJson(message);
         if (!recvMessageDoc.isNull() && recvMessageDoc.isObject()) {
             QJsonObject result = recvMessageDoc.object();
+            if (result.contains("message")) {
+                QString resultMessage = "---> " + result["message"].toString();
+                recvMessagesPlainTextEdit->appendPlainText(resultMessage);
+            }
             if (result.contains("id")) {
                 int id = result["id"].toInt();
                 switch (id) {   /* 根据JSON中的id键值判断是哪个任务的返回 */
@@ -264,8 +236,15 @@ void MainWindow::recv_message(const QByteArray &message, const QMqttTopicName &t
                 }
             }
         }
-
-
+    } else if (topic.name() == "esp32/error") {
+        QJsonDocument recvMessageDoc = QJsonDocument::fromJson(message);
+        if (recvMessageDoc.isNull() || !recvMessageDoc.isObject()) {
+            return;
+        }
+        QJsonObject error = recvMessageDoc.object();
+        QJsonObject errorObj = error["error"].toObject();
+        QString errorMessage = "错误：" + errorObj["message"].toString();
+        recvMessagesPlainTextEdit->appendPlainText(errorMessage);
     }
 }
 

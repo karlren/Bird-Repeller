@@ -28,3 +28,9 @@ build-*/
 *.xlsx
 GPT/
 **/mainwindows.ui
+
+# 忽略Qt的过大依赖文件避免上传不到github
+Qt/QtAPP/Qt5Cored.dll
+Qt/QtAPP/libGLESV2d.dll
+Qt/QtAPP/Qt5Widgetsd.dll
+Qt/QtAPP/Qt5Guid.dll

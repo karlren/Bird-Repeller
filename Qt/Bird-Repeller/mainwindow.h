@@ -19,6 +19,9 @@
 #include <QDoubleSpinBox>
 #include <QComboBox>
 #include <cmath>
+#include <QGroupBox>
+#include <QComboBox>
+#include <QPlainTextEdit>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -31,13 +34,10 @@ class MainWindow : public QMainWindow
 public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
-    int get_now_deviceID(void);
 
 private:
     Ui::MainWindow *ui;
     MqttSettingsWidget *mqttSettingsWidget;
-    QStackedWidget *stackedWidget;
-    QVBoxLayout *centralLayout;
 
     QPushButton *loadingButton;             /* 装弹按钮 */
     QPushButton *resettingButton;           /* 复位按钮 */
@@ -58,11 +58,9 @@ private:
     QPushButton *PTSetPanAngleButton;       /* 云台水平角度设置 */
     QPushButton *PTSetTiltAngleButton;      /* 云台俯仰角度设置 */
 
-    QButtonGroup *deviceGroup;              /* 选择设备组 */
-    QRadioButton *allDeviceRadioButton;     /* 选择所有设备互斥按钮 */
-    QRadioButton *firstDeviceRadioButton;   /* 选择第一个设备互斥按键 */
-    QRadioButton *secondDeviceRadioButton;  /* 选择第二个设备互斥按键 */
-    QRadioButton *thirdDeviceRadioButton;   /* 选择第三个设备互斥按键 */
+    QGroupBox *deviceGroupBox;
+
+    QComboBox *deviceComboBox;              /* 设备选择下拉 */
 
     QLabel *chooseDeviceLabel;              /* 选择设备标签 */
     QLabel *panAngleLabel;                  /* 云台水平轴角度显示标签 */
@@ -71,12 +69,15 @@ private:
     QLabel *PTPresetPointLabel;             /* 云台预设点标签 */
     QLabel *PTSetPanAngleLabel;             /* 云台水平角度设置标签   */
     QLabel *PTSetTiltAngleLabel;            /* 云台俯仰角度设置标签 */
+    QLabel *messageReturnLabel;             /* MQTT消息返回标签 */
 
     QSpinBox *PTcontrolSpeedSpinBox;        /* 云台速度控制数字框 */
     QSpinBox *PTPresetPointSpinBox;         /* 云台预设点数字框 */
 
     QDoubleSpinBox *PTSetPanAngleDoubleSpinBox; /* 云台水平角度设置浮点数数据框 */
     QDoubleSpinBox *PTSetTiltAngleDoubleSpinBox;/* 云台俯仰角度设置浮点数数据框 */
+
+    QPlainTextEdit *recvMessagesPlainTextEdit;  /* 接收MQTT消息展示框 */
 
     bool send_mqtt_command(const QString &method, QJsonObject params = QJsonObject(), int id = 0);
     bool send_mqtt_command(const QString &method, int id);
