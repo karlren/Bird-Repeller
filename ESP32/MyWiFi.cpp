@@ -130,11 +130,11 @@ void MyWiFi_Init(void)
     wifi_preferences.begin("wifi_config", false); // 初始化Preferences
 
     // 检查Clear_Button_Pin引脚状态
-    pinMode(Clear_Button_Pin, INPUT_PULLDOWN);
-    if (digitalRead(Clear_Button_Pin) == HIGH) {
-        clear_wifi_Preferences(); // 清除Flash中的内容
-        Serial.println("WiFi Preferences cleared.\n");
-    }
+    // pinMode(Clear_Button_Pin, INPUT_PULLDOWN);
+    // if (digitalRead(Clear_Button_Pin) == HIGH) {
+    //     clear_wifi_Preferences(); // 清除Flash中的内容
+    //     Serial.println("WiFi Preferences cleared.\n");
+    // }
     rpc.registerProcedure(Save_WiFi, "SaveWiFi");
 
     // 尝试连接存储的WiFi

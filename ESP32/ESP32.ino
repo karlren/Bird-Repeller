@@ -9,7 +9,7 @@
 #include "deviceControl.h"
 
 /* 设备号 */
-int deviceID = 2;
+int deviceID = 3;
 /* LED IO */
 const int LED_PIN = 2;
 

@@ -11,9 +11,15 @@ MyStepper::MyStepper(int stepPin, int dirPin, int resetPin, int shellDetPin, uin
     setAcceleration(CIRCLE_Puls * 2);     /* 设置加速度 */
     pinMode(resetPin, INPUT_PULLUP); // 设置 resetPin 为输入
     pinMode(shellDetPin, INPUT_PULLUP); // 设置 shellDetPin 为输入
+    mutex = xSemaphoreCreateMutex();
 }
 
 bool MyStepper::Init(void) {
+    // 获取互斥锁
+    if (xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) {
+        Serial.println("无法获取步进电机互斥锁");
+        return false;  // 锁获取失败时返回
+    }
     // digitalWrite(2, HIGH);
     // 设置目标位置
     move(CIRCLE_Puls * 10);
@@ -27,14 +33,24 @@ bool MyStepper::Init(void) {
     }
     // 当 resetPin 电平改变后，停止电机
     stop();
-    if (distanceToGo() == 0) 
+    if (distanceToGo() == 0) {
+        // 释放互斥锁
+        xSemaphoreGive(mutex);
         return false;
-    else
+    } else {
+        // 释放互斥锁
+        xSemaphoreGive(mutex);
         return true;
+    }
 }
 
 bool MyStepper::load(void)
 {
+    // 获取互斥锁
+    if (xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) {
+        Serial.println("无法获取步进电机互斥锁");
+        return false;  // 锁获取失败时返回
+    }
     int num = 0;
     while (1) {
         if (digitalRead(shellDetPin) == HIGH) {
@@ -46,6 +62,8 @@ bool MyStepper::load(void)
             return false;
     }
     RunSpeedTo(CIRCLE_Puls * 10 / 6, CIRCLE_Puls * 2);
+    // 释放互斥锁
+    xSemaphoreGive(mutex);
     return true;
 }
 

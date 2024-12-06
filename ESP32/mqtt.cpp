@@ -31,7 +31,8 @@ int mqttPort = 1883;                            /* 服务器端口号 */
 String mqttUsername = "ESP32";                  /* MQTT登录账号 */
 String mqttPassword = "123456";                 /* MQTT登录密码 */
 
-static DynamicJsonDocument g_mqttDoc(4096);
+TaskHandle_t mqttTaskHandle = NULL;             /* 任务句柄 */
+
 
 void clear_mqtt_Preferences() {
     mqtt_preferences.clear(); // 清除所有Preferences数据
@@ -345,12 +346,37 @@ JsonObject mqttSaveUserConfig(JsonObject params)
     return result;
 }
 
+// 任务函数，用于处理接收到的MQTT消息
+void mqttTask(void* pvParameters) 
+{
+    String payload = (char*)pvParameters;  // 从参数中获取消息内容
+    DynamicJsonDocument mqttDoc(4096);
+    DeserializationError error = deserializeJson(mqttDoc, payload);
+    if (!error) {
+        rpc.jsonParse(mqttDoc, "mqtt");
+    } else {
+        rpc.sendError("Failed to parse JSON", "mqtt");
+    }
+
+    // Serial.print("Handling MQTT message: ");
+    // Serial.println(payload);
+    
+    UBaseType_t remainingStack = uxTaskGetStackHighWaterMark(NULL); // NULL表示获取当前任务的栈大小
+    Serial.printf("MQTT任务剩余栈大小为: %d\n", remainingStack * sizeof(StackType_t));// 转换为字节
+    // 任务结束时，删除任务
+    vTaskDelete(NULL);
+}
+
 /****************************************订阅消息处理函数如下****************************************/
 void onMqttMessage(char* topic, char* payload, const AsyncMqttClientMessageProperties& properties,
                    const size_t& len, const size_t& index, const size_t& total)
 {
     payload[len] = '\0';
-    
+    // 将接收到的消息转为String
+    String message = String((char*)payload);
+    // 使用strdup复制消息内容到堆上
+    char* messageCopy = strdup(message.c_str());
+
 #if _MY_MQTT_LOGLEVEL_ >= 4
     Serial.println("Publish received.");
     Serial.print("  topic: ");
@@ -369,12 +395,14 @@ void onMqttMessage(char* topic, char* payload, const AsyncMqttClientMessagePrope
     Serial.println(total);
 #endif
     if (!strcmp(topic, "esp32/control")) {
-        DeserializationError error = deserializeJson(g_mqttDoc, payload);
-        if (!error) {
-            rpc.jsonParse(g_mqttDoc, "mqtt");
-        } else {
-            rpc.sendError("Failed to parse JSON", "mqtt");
-        }
+        xTaskCreate(
+            mqttTask,              // 任务函数
+            "MqttTask",            // 任务名称
+            8192,                  // 任务栈大小
+            (void*)messageCopy,     // 任务参数（MQTT消息）
+            1,                     // 任务优先级
+            &mqttTaskHandle        // 任务句柄
+        );
     } else {
         Serial.printf("From [%s] : %s\n", topic, payload);
     }

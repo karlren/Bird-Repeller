@@ -8,6 +8,7 @@ public:
     bool Init(void);
     bool load(void);
 private:
+    SemaphoreHandle_t mutex;  // 创建互斥锁句柄
     int StepPin, dirPin, resetPin, shellDetPin;
     uint32_t CIRCLE_Puls;
     void RunSpeedTo(uint16_t dis, uint16_t speed);

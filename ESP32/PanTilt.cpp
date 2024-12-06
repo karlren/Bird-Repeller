@@ -12,6 +12,7 @@ bool PanTilt::begin(int baud)
 {
     this->baud = baud;
     PanTiltSerial.begin(baud);
+    mutex = xSemaphoreCreateMutex();
     return true;
 }
 
@@ -22,10 +23,19 @@ bool PanTilt::control(byte command, byte param1, byte param2)
     byte *receivedData = (byte *)malloc(sizeof(byte) * 8);
     byte *SendCommand = (byte *)malloc(sizeof(byte) * 8);
     String commandAttribute;
-    
+
+    // 获取锁
+    if (xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) {
+        Serial.println("无法获取互斥锁");
+        free(SendCommand);
+        free(receivedData);
+        return false;
+    }
+
     if (command == 0x00 || command > 48) {
         goto controlFail;
     }
+
     getControlCommand(SendCommand, command, param1, param2);
     if (SendCommand[1] == 0x03) {           /* 查询命令 */
         commandAttribute = "inquire";
@@ -71,20 +81,22 @@ bool PanTilt::control(byte command, byte param1, byte param2)
     }
     free(SendCommand);
     free(receivedData);
+    xSemaphoreGive(mutex);  // 释放锁
     return true;
 controlFail:
     free(SendCommand);
     free(receivedData);
+    xSemaphoreGive(mutex);  // 释放锁
     return false;
 }
 
-float PanTilt::getHorizontalAngle(void)
+float PanTilt::getPanAngle(void)
 {
     control(22, 0, 0);
     return this->horizontalAngle;
 }
 
-float PanTilt::getVerticalAngle(void)
+float PanTilt::getTiltAngle(void)
 {
     control(23, 0, 0);
     return this->verticalAngle;

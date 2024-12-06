@@ -10,10 +10,12 @@ public:
     bool begin(int baud = 9600);
     bool control(byte command, byte param1 = 0, byte param2 = 0);
     bool control(JsonObject params);
-    float getHorizontalAngle(void);
-    float getVerticalAngle(void);
+    float getPanAngle(void);
+    float getTiltAngle(void);
     bool setLoading(void);
 private:
+    // 创建互斥锁句柄
+    SemaphoreHandle_t mutex;
     int baud;
     int sendInterval;
     int maxSendNumber;
