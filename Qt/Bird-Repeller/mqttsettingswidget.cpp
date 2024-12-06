@@ -5,7 +5,7 @@ MqttSettingsWidget::MqttSettingsWidget(QWidget *parent) : QWidget(parent)
     mqttConfigFileName = "config/mqtt_config.json";
     mqttJsonObject["mqttServerAddr"] = "139.9.223.99";
     mqttJsonObject["mqttServerPort"] = 1883;
-    mqttJsonObject["mqttUsername"] = "qt";
+    mqttJsonObject["mqttUsername"] = "Qt";
     mqttJsonObject["mqttPassword"] = "123456";
     /* 打开文件，如果文件不存在就创建 */
     if (!readJsonFromFile(mqttConfigFileName, mqttJsonObject)) {
