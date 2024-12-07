@@ -34,10 +34,10 @@ bool jsonrpc::jsonParse(DynamicJsonDocument& doc, String source)
     }
     /* 判断键deviceID是否存在 */
     if (!doc.containsKey("deviceID") && source == "mqtt") {
-        if (deviceID == 1){
+        // if (deviceID == 1){
             sendError("error : deviceID does not exist", source, id);
-            return false;
-        }
+        // }
+        return false;
     } else if (doc.containsKey("deviceID") && source == "mqtt") {
         JsonVariant devID = doc["deviceID"];
         /* 如果命令的控制设备号不为当前设备号，则不响应命令（0表示广播控制）*/

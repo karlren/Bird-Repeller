@@ -28,7 +28,7 @@ char receivedMessages[MAX_MESSAGE_LENGTH];      /* 存储接收到的消息的�
 Preferences mqtt_preferences;                   /* flash存储对象 */
 IPAddress mqttHost = IPAddress(139, 9, 223, 99);/* 服务器IP对象 */
 int mqttPort = 1883;                            /* 服务器端口号 */
-String mqttUsername = "ESP32";                  /* MQTT登录账号 */
+String mqttUsername = "ESP32_device0";                  /* MQTT登录账号 */
 String mqttPassword = "123456";                 /* MQTT登录密码 */
 
 TaskHandle_t mqttTaskHandle = NULL;             /* 任务句柄 */
@@ -40,14 +40,14 @@ void clear_mqtt_Preferences() {
 
 void reconnectToWiFi(void)
 {
-    Serial.println("重新连接WiFi");
-    /* 尝试连接存储的WiFi */ 
-    for (int i = 0; i < maxWiFiConfigs; i++) {
-        connectToWiFi(i);
-        if (WiFi.status() == WL_CONNECTED) {
-            break; // 如果已连接，跳出循环
-        }
-    }
+    // Serial.println("重新连接WiFi");
+    // /* 尝试连接存储的WiFi */ 
+    // for (int i = 0; i < maxWiFiConfigs; i++) {
+    //     connectToWiFi(i);
+    //     if (WiFi.status() == WL_CONNECTED) {
+    //         break; // 如果已连接，跳出循环
+    //     }
+    // }
 }
 
 /*连接MQTT*/
@@ -91,8 +91,8 @@ void WiFiEvent(WiFiEvent_t event)
         /*ESP32与Wi-Fi网络断开连接*/
         case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
             Serial.println("WiFi lost connection");
-            xTimerStop(mqttReconnectTimer, 0);  /*停止mqttReconnectTimer以确保在Wi-Fi重新连接之前不会重新连接MQTT代理。然后启动wifiReconnectTimer，尝试重新连接Wi-Fi*/
-            xTimerStart(wifiReconnectTimer, 0);
+            // xTimerStop(mqttReconnectTimer, 0);  /*停止mqttReconnectTimer以确保在Wi-Fi重新连接之前不会重新连接MQTT代理。然后启动wifiReconnectTimer，尝试重新连接Wi-Fi*/
+            // xTimerStart(wifiReconnectTimer, 0);
         break;
     #else
         case SYSTEM_EVENT_STA_GOT_IP:
