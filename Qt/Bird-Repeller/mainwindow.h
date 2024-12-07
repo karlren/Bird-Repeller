@@ -43,6 +43,7 @@ private:
     QPushButton *resettingButton;           /* 复位按钮 */
     QPushButton *connectButton;             /* MQTT连接按钮 */
     QPushButton *inquireButton;             /* 查询角度按钮 */
+    QPushButton *deviceQueryButton;         /* 设备查询按钮 */
 
     QButtonGroup *PTcontrolButtonGruop;     /* 云台控制按键组 */
     QPushButton *upButton;                  /* 云台控制向上按键 */
@@ -78,6 +79,7 @@ private:
     QDoubleSpinBox *PTSetTiltAngleDoubleSpinBox;/* 云台俯仰角度设置浮点数数据框 */
 
     QPlainTextEdit *recvMessagesPlainTextEdit;  /* 接收MQTT消息展示框 */
+    QPushButton *clearRecvMessageButton;
 
     bool send_mqtt_command(const QString &method, QJsonObject params = QJsonObject(), int id = 0);
     bool send_mqtt_command(const QString &method, int id);
@@ -102,6 +104,8 @@ private slots:
     void PTPresetPointDeleteButton_clicked();
     void PTSetPanAngleButton_clicked();
     void PTSetTiltAngleButton_clicked();
+    void deviceComboBox_indexChanged(int index);
+    void deviceQueryButton_chicked();
 };
 
 struct DeviceAngle {

@@ -48,6 +48,7 @@ MainWindow::MainWindow(QWidget *parent)
     inquireButton->setGeometry(450, 100, 150, 80);
     connect(inquireButton, &QPushButton::clicked, this, &MainWindow::inquireButton_clicked);
 
+    /* 设备选择下拉框 */
     deviceComboBox = new QComboBox(this);
     deviceComboBox->addItem("所有设备");
     for (int i = 1; i <= 5; ++i) {
@@ -55,6 +56,13 @@ MainWindow::MainWindow(QWidget *parent)
     }
     deviceComboBox->setGeometry(50, 130, 180, 50);
     deviceComboBox->setCurrentIndex(1);
+    connect(deviceComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::deviceComboBox_indexChanged);
+
+    /* 设备查询按键 */
+    deviceQueryButton = new QPushButton("查询在线设备", this);
+    deviceQueryButton->setGeometry(450, 100, 150, 80);
+    deviceQueryButton->hide();
+    connect(deviceQueryButton, &QPushButton::clicked, this, &MainWindow::deviceQueryButton_chicked);
 
     /* 云台控制按键 */
     upButton = new QPushButton("↑", this);
@@ -143,6 +151,14 @@ MainWindow::MainWindow(QWidget *parent)
     messageReturnLabel->setGeometry(750, 380, 150, 50);
     recvMessagesPlainTextEdit = new QPlainTextEdit(this);
     recvMessagesPlainTextEdit->setGeometry(750, 430, 400, 150);
+    QFont recvMessagesFont;
+    recvMessagesFont.setPointSize(10);    // 设置字体大小为 10pt
+    recvMessagesPlainTextEdit->setFont(recvMessagesFont);
+    clearRecvMessageButton = new QPushButton("清除", this);
+    clearRecvMessageButton->setGeometry(900, 380, 100, 50);
+    connect(clearRecvMessageButton, &QPushButton::clicked,
+            recvMessagesPlainTextEdit, &QPlainTextEdit::clear);
+
 
     connect(PTSetPanAngleButton, &QPushButton::clicked, this, &MainWindow::PTSetPanAngleButton_clicked);
     connect(PTSetTiltAngleButton, &QPushButton::clicked, this, &MainWindow::PTSetTiltAngleButton_clicked);
@@ -203,6 +219,7 @@ void MainWindow::updateLogStateChange()
         connectButton->setText("已连接");
         pMqttClient->subscribe(QMqttTopicFilter("esp32/result"));   /* 订阅主题 */
         pMqttClient->subscribe(QMqttTopicFilter("esp32/error"));   /* 订阅主题 */
+        pMqttClient->subscribe(QMqttTopicFilter("esp32/deviceList"));   /* 订阅主题 */
     }
 }
 
@@ -235,6 +252,12 @@ void MainWindow::recv_message(const QByteArray &message, const QMqttTopicName &t
                     break;
                 }
             }
+            if (result.contains("IP")) {
+                QString message = "设备" + QString::number(result["deviceID"].toInt()) + "在线。";
+                message += "版本为" + result["edition"].toString();
+                message += ",IP地址：" + result["IP"].toString();
+                recvMessagesPlainTextEdit->appendPlainText(message);
+            }
         }
     } else if (topic.name() == "esp32/error") {
         QJsonDocument recvMessageDoc = QJsonDocument::fromJson(message);
@@ -245,6 +268,16 @@ void MainWindow::recv_message(const QByteArray &message, const QMqttTopicName &t
         QJsonObject errorObj = error["error"].toObject();
         QString errorMessage = "错误：" + errorObj["message"].toString();
         recvMessagesPlainTextEdit->appendPlainText(errorMessage);
+    } else if (topic.name() == "esp32/deviceList") {
+        QJsonDocument recvMessageDoc = QJsonDocument::fromJson(message);
+        if (recvMessageDoc.isNull() || !recvMessageDoc.isObject()) {
+            return;
+        }
+        QJsonObject result = recvMessageDoc.object();
+        QString message = "设备" + QString::number(result["deviceID"].toInt()) + "已上线。";
+        message += "版本为" + result["edition"].toString();
+        message += ",IP地址：" + result["IP"].toString();
+        recvMessagesPlainTextEdit->appendPlainText(message);
     }
 }
 
@@ -389,6 +422,26 @@ void MainWindow::PTSetTiltAngleButton_clicked()
     params["params2"] = decimalPart;
 
     send_mqtt_command("PanTiltControl", params);
+}
+
+void MainWindow::deviceComboBox_indexChanged(int index)
+{
+    if (index == 0) {
+        inquireButton->setVisible(false);
+        panAngleLabel->setVisible(false);
+        tiltAngleLabel->setVisible(false);
+        deviceQueryButton->setVisible(true);
+    } else {
+        inquireButton->setVisible(true);
+        panAngleLabel->setVisible(true);
+        tiltAngleLabel->setVisible(true);
+        deviceQueryButton->setVisible(false);
+    }
+}
+
+void MainWindow::deviceQueryButton_chicked()
+{
+    send_mqtt_command("getDeviceData");
 }
 
 void MainWindow::keyPressEvent(QKeyEvent *event)
