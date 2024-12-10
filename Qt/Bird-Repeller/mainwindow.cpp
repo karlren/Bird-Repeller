@@ -35,18 +35,22 @@ MainWindow::MainWindow(QWidget *parent)
 
     /* 云台装弹按钮 */
     loadingButton = new QPushButton("装弹", this);
-    loadingButton->setGeometry(250, 100, 150, 80);
+    loadingButton->setGeometry(270, 100, 150, 80);
     connect(loadingButton, &QPushButton::clicked, this, &MainWindow::loadingButton_clicked);
 
     /* 装弹复位按钮 */
     resettingButton = new QPushButton("装弹复位", this);
-    resettingButton->setGeometry(250, 200, 150, 80);
+    resettingButton->setGeometry(270, 200, 150, 80);
     connect(resettingButton, &QPushButton::clicked, this, &MainWindow::resettingButton_clicked);
 
     /* 角度查询按钮 */
     inquireButton = new QPushButton("角度查询", this);
-    inquireButton->setGeometry(450, 100, 150, 80);
+    inquireButton->setGeometry(600, 100, 150, 80);
     connect(inquireButton, &QPushButton::clicked, this, &MainWindow::inquireButton_clicked);
+    panAngleLabel = new QLabel("水平角度：0", this);
+    panAngleLabel->setGeometry(800, 90, 300, 50);
+    tiltAngleLabel = new QLabel("俯仰角度：0", this);
+    tiltAngleLabel->setGeometry(800, 150, 300, 50);
 
     /* 设备选择下拉框 */
     deviceComboBox = new QComboBox(this);
@@ -56,12 +60,12 @@ MainWindow::MainWindow(QWidget *parent)
     }
     deviceComboBox->setGeometry(50, 130, 180, 50);
     deviceComboBox->setCurrentIndex(1);
-    connect(deviceComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::deviceComboBox_indexChanged);
+//    connect(deviceComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::deviceComboBox_indexChanged);
 
     /* 设备查询按键 */
     deviceQueryButton = new QPushButton("查询在线设备", this);
-    deviceQueryButton->setGeometry(450, 100, 150, 80);
-    deviceQueryButton->hide();
+    deviceQueryButton->setGeometry(50, 225, 180, 80);
+//    deviceQueryButton->hide();
     connect(deviceQueryButton, &QPushButton::clicked, this, &MainWindow::deviceQueryButton_chicked);
 
     /* 云台控制按键 */
@@ -71,11 +75,11 @@ MainWindow::MainWindow(QWidget *parent)
     rightButton = new QPushButton("→", this);
     stopButton = new QPushButton("停止", this);
 
-    upButton->setGeometry(500, 250, 80, 80);
-    downButton->setGeometry(500, 410, 80, 80);
-    leftButton->setGeometry(420, 330, 80, 80);
-    rightButton->setGeometry(580, 330, 80, 80);
-    stopButton->setGeometry(500, 330, 80, 80);
+    upButton->setGeometry(520, 250, 80, 80);
+    downButton->setGeometry(520, 410, 80, 80);
+    leftButton->setGeometry(440, 330, 80, 80);
+    rightButton->setGeometry(600, 330, 80, 80);
+    stopButton->setGeometry(520, 330, 80, 80);
 
     PTcontrolButtonGruop = new QButtonGroup();
     PTcontrolButtonGruop->addButton(stopButton, 0);
@@ -100,12 +104,8 @@ MainWindow::MainWindow(QWidget *parent)
     /* 标签 */
     chooseDeviceLabel = new QLabel("选择设备", this);
     chooseDeviceLabel->setGeometry(50, 80, 180, 50);
-    panAngleLabel = new QLabel("水平角度：0", this);
-    panAngleLabel->setGeometry(650, 90, 300, 50);
-    tiltAngleLabel = new QLabel("俯仰角度：0", this);
-    tiltAngleLabel->setGeometry(650, 150, 300, 50);
     PTcontrolSpeedLabel = new QLabel("速度控制：", this);
-    PTcontrolSpeedLabel->setGeometry(400, 500, 150, 50);
+    PTcontrolSpeedLabel->setGeometry(440, 500, 150, 50);
     PTPresetPointLabel = new QLabel("预设点：", this);
     PTPresetPointLabel->setGeometry(50, 350, 100, 50);
 
@@ -119,7 +119,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     /* 云台速度控制滑动框 */
     PTcontrolSpeedSpinBox = new QSpinBox(this);
-    PTcontrolSpeedSpinBox->setGeometry(520, 500, 100, 50);
+    PTcontrolSpeedSpinBox->setGeometry(560, 500, 100, 50);
     PTcontrolSpeedSpinBox->setValue(0x20);
     PTcontrolSpeedSpinBox->setMinimum(0);
     PTcontrolSpeedSpinBox->setMaximum(0x40);
@@ -170,6 +170,8 @@ MainWindow::MainWindow(QWidget *parent)
     /* 连接云台控制按键组信号 */
     connect(PTcontrolButtonGruop, QOverload<int>::of(&QButtonGroup::buttonClicked),
             this, &MainWindow::PTcontrolButton_clicked);
+
+    connectButton_clicked();
 }
 
 MainWindow::~MainWindow()
@@ -266,7 +268,7 @@ void MainWindow::recv_message(const QByteArray &message, const QMqttTopicName &t
         }
         QJsonObject error = recvMessageDoc.object();
         QJsonObject errorObj = error["error"].toObject();
-        QString errorMessage = "错误：" + errorObj["message"].toString();
+        QString errorMessage = "设备" + QString::number(error["deviceID"].toInt()) + "错误：" + errorObj["message"].toString();
         recvMessagesPlainTextEdit->appendPlainText(errorMessage);
     } else if (topic.name() == "esp32/deviceList") {
         QJsonDocument recvMessageDoc = QJsonDocument::fromJson(message);
@@ -308,7 +310,7 @@ void MainWindow::connectButton_clicked()
 
 void MainWindow::loadingButton_clicked()
 {
-    send_mqtt_command("Stepperload");
+    send_mqtt_command("loading");
 }
 
 void MainWindow::resettingButton_clicked()
