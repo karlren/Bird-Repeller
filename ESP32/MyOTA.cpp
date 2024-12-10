@@ -109,7 +109,7 @@ void OTA_Init(void)
     if (!MDNS.begin(OTAhost)) { // http://esp32.local
         Serial.println("Error setting up MDNS responder!"); // 初始化失败时输出错误信息
         while (1) {
-            delay(1000); // 循环等待
+            vTaskDelay(pdMS_TO_TICKS(1000)); // 循环等待
         }
     }
     // Serial.println("mDNS responder started");

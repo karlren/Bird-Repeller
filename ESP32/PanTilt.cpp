@@ -3,9 +3,9 @@
 
 PanTilt::PanTilt(int rxPin, int txPin) : PanTiltSerial(rxPin, txPin)
 {
-    PTaddr = 0x01;  /* 云台地址 */
-    sendInterval = 500; /* 发送间隔500ms */
-    maxSendNumber = 3; /* 最大重复发送次数3次 */
+    PTaddr = 0x01;          /* 云台地址 */
+    sendInterval = 100;     /* 发送间隔100ms */
+    maxSendNumber = 3;      /* 最大重复发送次数3次 */
 }
 
 bool PanTilt::begin(int baud)
@@ -54,7 +54,7 @@ bool PanTilt::control(byte command, byte param1, byte param2)
                 Serial.printf("设备无响应\n");
                 goto controlFail;
             }
-            printData("发送数据:", SendCommand, 8);
+            printData("发送给云台的数据:", SendCommand, 8);
             PanTiltSerial.write(SendCommand, 8);    /* 发送控制命令数组 */
             lastSendTime = millis();
             sendCount++;
@@ -78,6 +78,7 @@ bool PanTilt::control(byte command, byte param1, byte param2)
             Serial.printf("\n云台返回数据错误，recvDataLen = %d\n", recvDataLen);
             goto controlFail;
         }
+        vTaskDelay(pdMS_TO_TICKS(10));  /* 释放CPU一段时间，避免IDLE任务无法喂狗 */
     }
     free(SendCommand);
     free(receivedData);
@@ -92,14 +93,17 @@ controlFail:
 
 float PanTilt::getPanAngle(void)
 {
-    control(22, 0, 0);
-    return this->horizontalAngle;
+    if (control(22, 0, 0)) {
+        return this->panAngle;
+    } else {
+        return NAN;
+    }
 }
 
 float PanTilt::getTiltAngle(void)
 {
     control(23, 0, 0);
-    return this->verticalAngle;
+    return this->tiltAngle;
 }
 
 void PanTilt::queryCommandParsing(byte *command, int lastCommand)
@@ -107,12 +111,12 @@ void PanTilt::queryCommandParsing(byte *command, int lastCommand)
     switch (lastCommand)
     {
     case 22:        /* 水平角度查询 */
-        horizontalAngle = ((command[3] << 8) + command[4]) / 100.0f;
-        Serial.printf("水平角度:%.2f\n", horizontalAngle);
+        panAngle = ((command[3] << 8) + command[4]) / 100.0f;
+        Serial.printf("水平角度:%.2f\n", panAngle);
         break;
     case 23:        /* 垂直角度查询 */
-        verticalAngle = ((command[3] << 8) + command[4]) / 100.0f;
-        Serial.printf("垂直角度:%.2f\n", verticalAngle);
+        tiltAngle = ((command[3] << 8) + command[4]) / 100.0f;
+        Serial.printf("垂直角度:%.2f\n", tiltAngle);
         break;
     case 43:        /* 查询云台地址 */
         Serial.printf("云台地址为%02X\n", command[4]);
@@ -266,7 +270,7 @@ bool PanTilt::setLoading(void)
     if (control(11, 0, 0xFF)) {
         if (control(12, 0, 0)) {
             Serial.println("到达状态位置");
-            delay(1000);
+            vTaskDelay(pdMS_TO_TICKS(1000));
             Serial.println("装弹成功");
         }
     }

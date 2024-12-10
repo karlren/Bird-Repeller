@@ -2,8 +2,9 @@
 #include "MyStepper.h"
 #include "jsonrpc.h"
 #include "mqtt.h"
+#include "airpump.h"
+#include "Task.h"
 
-#define CIRCLE_Puls          6400         //电机旋转一圈的脉冲数
 
 /* 装弹步进电机相关IO口 */
 const int stepPin = 4;
@@ -17,7 +18,9 @@ const int IgnitionPin = 11; /* 未确定 */
 Preferences devicePreferences;
 
 PanTilt PT(18, 19);
-MyStepper stepper(stepPin, dirPin, resetPin, shellDetPin, CIRCLE_Puls);
+MyStepper stepper(stepPin, dirPin, resetPin, shellDetPin);
+
+// TimerHandle_t angleReturnTimer;               /*角度回传的定时器*/
 
 void GetDeviceData(void);
 JsonObject PanTiltControl(JsonObject params);
@@ -49,6 +52,9 @@ bool deviceInit(void)
     }
     if (!rpc.registerProcedure(loading, "loading")) {
         Serial.println("函数loading注册失败");
+    }
+    if (!rpc.registerProcedure(changeDeviceID, "changeDeviceID")) {
+        Serial.println("函数changeDeviceID注册失败");
     }
     // stepper.Init();
     return true;
@@ -109,13 +115,13 @@ JsonObject getPTAngle(JsonObject params)
     float tiltAngle;        /* 垂直角度 */
 
     panAngle = PT.getPanAngle();
-    tiltAngle = PT.getTiltAngle();
 
-    if (panAngle == 0 && tiltAngle == 0) {
+    if (panAngle == NAN) {
         JsonObject error = errorDoc.to<JsonObject>();
         error["error"]["message"] = "与云台通讯异常";
         return error;
     }
+    tiltAngle = PT.getTiltAngle();
 
     JsonObject result = doc.to<JsonObject>();
 
@@ -187,11 +193,11 @@ JsonObject loading(JsonObject params)
         float tiltAngle;        /* 垂直角度 */
         panAngle = PT.getPanAngle();
         tiltAngle = PT.getTiltAngle();
-        if (panAngle > 64.0f && panAngle < 66.0f
-            && (tiltAngle > 359.0f || tiltAngle < 1.0f)) {
+        if (panAngle > 59.5f && panAngle < 60.5f
+            && (tiltAngle > 359.5f || tiltAngle < 0.5f)) {
             break;
         }
-        if (millis() - lastTime > 20000) {  /* 如果超过20秒还没移动结束就报错 */
+        if (millis() - lastTime > 5000) {  /* 如果超过5秒还没移动结束就报错 */
             JsonObject error = errorDoc.to<JsonObject>();
             error["error"]["message"] = "云台移动超时或与云台通讯异常";
             return error;
@@ -240,7 +246,7 @@ JsonObject ignition(JsonObject params)
     // String message = "The ignition was successful";
     String message = "装弹成功";
     digitalWrite(IgnitionPin, LOW);
-    vTaskDelay(1000);
+    vTaskDelay(pdMS_TO_TICKS(1000));
     digitalWrite(IgnitionPin, HIGH);
     JsonObject result = doc.to<JsonObject>();
     result["message"] = message;
@@ -248,6 +254,59 @@ JsonObject ignition(JsonObject params)
     return result;
 }
 
+// JsonObject setAngleReturn(JsonObject params)
+// {
+//     static DynamicJsonDocument doc(128); 
+//     static DynamicJsonDocument errorDoc(128);
+//     static bool timerStatus = false;
+//     float panAngle;         /* 水平角度 */
+//     float tiltAngle;        /* 垂直角度 */
+//     if (params.containsKey("status")) {
+//         JsonObject error = errorDoc.to<JsonObject>();
+//         error["error"]["message"] = "无设置status值";
+//         return error;
+//     }
+//     panAngle = PT.getPanAngle();
+//     if (panAngle == NAN) {
+//         JsonObject error = errorDoc.to<JsonObject>();
+//         error["error"]["message"] = "与云台通讯异常,角度回传设置失败";
+//         return error;
+//     }
+
+//     String status = params["status"];
+//     if (status == "close" && timerStatus) {
+//         // 停止定时器
+//         xTimerStop(angleReturnTimer, 0);
+//         timerStatus = false;
+//         String message = "云台角度回传已关闭";
+//         JsonObject result = doc.to<JsonObject>();
+//         result["message"] = message;
+//         result["deviceID"] = deviceID;
+//         return result;
+//     } else if (status == "open" && !timerStatus) {
+//         // 创建定时器，回调函数每5秒触发一次
+//         angleReturnTimer = xTimerCreate("AngleReturnTimer", pdMS_TO_TICKS(500), pdTRUE, (void*)0, angleReturnTimerCallback);
+//         if (angleReturnTimer != NULL) {
+//             // 启动定时器
+//             xTimerStart(angleReturnTimer, 0);
+//             timerStatus = true;
+//         } else {
+//             Serial.println("定时器创建失败！");
+//             JsonObject error = errorDoc.to<JsonObject>();
+//             error["error"]["message"] = "定时器创建失败";
+//             return error;
+//         }
+//     } else {
+//         JsonObject error = errorDoc.to<JsonObject>();
+//         error["error"]["message"] = "参数status错误";
+//         return error;
+//     }
+
+//     JsonObject result = doc.to<JsonObject>();
+//     result["message"] = message;
+//     result["deviceID"] = deviceID;
+//     return result;
+// }
 
 /* 任务模板
 JsonObject template(JsonObject params)
@@ -263,6 +322,6 @@ JsonObject template(JsonObject params)
     JsonObject result = doc.to<JsonObject>();
     result["message"] = message;
     result["deviceID"] = deviceID;
-    return 
+    return result;
 }
 */

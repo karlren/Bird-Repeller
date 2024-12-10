@@ -10,7 +10,7 @@ jsonrpc::jsonrpc(void)
 bool jsonrpc::jsonParse(DynamicJsonDocument& doc, String source)
 {
     int i;
-    int id;
+    int id = 0;
     JsonObject params = JsonObject(); // 创建一个空的JsonObject
 
     if (procedureCount == 0) {
@@ -28,9 +28,10 @@ bool jsonrpc::jsonParse(DynamicJsonDocument& doc, String source)
         return false;
     }
     if (doc.containsKey("id")) {
-        id = doc["id"];
+        id = doc["id"].as<int>();
+        Serial.printf("id为%d\n", id);
     } else {
-        id = 0;
+        Serial.printf("无任务ID数据\n");
     }
     /* 判断键deviceID是否存在 */
     if (!doc.containsKey("deviceID") && source == "mqtt") {
@@ -62,6 +63,9 @@ bool jsonrpc::jsonParse(DynamicJsonDocument& doc, String source)
         for (i = 0; i < procedureCount; i++) {
             if (strcmp(procedures[i].name, method.c_str()) == 0) {
                 JsonObject result = procedures[i].function(params);
+                if (id != 0) {
+                    result["id"] = id;
+                }
                 sendResult(result, source, id);
                 break;
             }

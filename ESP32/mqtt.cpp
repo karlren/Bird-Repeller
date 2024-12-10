@@ -3,12 +3,10 @@
 #include <AsyncMqtt_Generic.h>
 #include "WiFi.h"
 #include <Preferences.h>
-
-// extern "C"
-// {
+#include "deviceData.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/timers.h"
-// }
+
 /* 清除数据引脚，开机时接低电平就会清空flash中存储的MQTT数据 */
 /* 15引脚可能有点问题，在烧录的时候会读到低电平，导致每次烧录的时候都会清空flash存储的数据，具体是不是引脚的问题还没测 */
 /* 到时候可以用上拉电阻试一下，目前为悬空状态 */
@@ -28,7 +26,7 @@ char receivedMessages[MAX_MESSAGE_LENGTH];      /* 存储接收到的消息的�
 Preferences mqtt_preferences;                   /* flash存储对象 */
 IPAddress mqttHost = IPAddress(139, 9, 223, 99);/* 服务器IP对象 */
 int mqttPort = 1883;                            /* 服务器端口号 */
-String mqttUsername = "ESP32_device0";                  /* MQTT登录账号 */
+String mqttUsername = "ESP32_device" + String(deviceID);                  /* MQTT登录账号 */
 String mqttPassword = "123456";                 /* MQTT登录密码 */
 
 TaskHandle_t mqttTaskHandle = NULL;             /* 任务句柄 */
@@ -53,7 +51,7 @@ void reconnectToWiFi(void)
 /*连接MQTT*/
 void connectToMqtt()
 {
-    Serial.println("Connecting to MQTT...");
+    // Serial.println("Connecting to MQTT...");
     mqttClient.connect();
 }
 
@@ -66,22 +64,22 @@ void WiFiEvent(WiFiEvent_t event)
     #if USING_CORE_ESP32_CORE_V200_PLUS
         /*Wi-Fi准备就绪*/
         case ARDUINO_EVENT_WIFI_READY:
-            Serial.println("WiFi ready");
+            // Serial.println("WiFi ready");
         break;
         /*ESP32的Wi-Fi站点模式（STA）启动*/
         case ARDUINO_EVENT_WIFI_STA_START:
-            Serial.println("WiFi STA starting");
+            // Serial.println("WiFi STA starting");
         break;
         /*ESP32成功连接到Wi-Fi网络*/
         case ARDUINO_EVENT_WIFI_STA_CONNECTED:
-            Serial.println("WiFi STA connected");
+            // Serial.println("WiFi STA connected");
         break;
         /*ESP32成功获取到IPv6或IPv4地址*/
         case ARDUINO_EVENT_WIFI_STA_GOT_IP6:
         case ARDUINO_EVENT_WIFI_STA_GOT_IP:
-            Serial.println("WiFi connected");
-            Serial.print("IP address: ");
-            Serial.println(WiFi.localIP());
+            // Serial.println("WiFi connected");
+            // Serial.print("IP address: ");
+            // Serial.println(WiFi.localIP());
             connectToMqtt();
         break;
         /*ESP32失去IP地址*/
@@ -91,19 +89,19 @@ void WiFiEvent(WiFiEvent_t event)
         /*ESP32与Wi-Fi网络断开连接*/
         case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
             Serial.println("WiFi lost connection");
-            // xTimerStop(mqttReconnectTimer, 0);  /*停止mqttReconnectTimer以确保在Wi-Fi重新连接之前不会重新连接MQTT代理。然后启动wifiReconnectTimer，尝试重新连接Wi-Fi*/
-            // xTimerStart(wifiReconnectTimer, 0);
+            xTimerStop(mqttReconnectTimer, 0);  /*停止mqttReconnectTimer以确保在Wi-Fi重新连接之前不会重新连接MQTT代理。然后启动wifiReconnectTimer，尝试重新连接Wi-Fi*/
+            xTimerStart(wifiReconnectTimer, 0);
         break;
     #else
         case SYSTEM_EVENT_STA_GOT_IP:
-            Serial.println("WiFi connected");
-            Serial.println("IP address: ");
-            Serial.println(WiFi.localIP());
+            // Serial.println("WiFi connected");
+            // Serial.println("IP address: ");
+            // Serial.println(WiFi.localIP());
             connectToMqtt();
         break;
     
         case SYSTEM_EVENT_STA_DISCONNECTED:
-            Serial.println("WiFi lost connection");
+            // Serial.println("WiFi lost connection");
             xTimerStop(mqttReconnectTimer, 0); /*停止mqttReconnectTimer以确保在Wi-Fi重新连接之前不会重新连接MQTT代理。然后启动wifiReconnectTimer，尝试重新连接Wi-Fi*/
             xTimerStart(wifiReconnectTimer, 0);
         break;
@@ -134,15 +132,8 @@ void onMqttConnect(bool sessionPresent)
     Serial.print(", Session present: ");
     Serial.println(sessionPresent);
 #endif
-    
-    // String message = String("{\"deviceID\":") + deviceID + String("\"IP\":") + WiFi.localIP().toString() + String("}");
     mqttSendDeviceData();
-    uint16_t packetIdSub = MQTT_Subscribe_Topics("esp32/humiture", 0);
     MQTT_Subscribe_Topics("esp32/control", 0);
-
-#if _MY_MQTT_LOGLEVEL_ >= 3
-    Serial.printf("Subscribing at QoS 2, packetId: %d\n", packetIdSub);
-#endif
 }
 
 /* MQTT断开时的回调函数，reason是一个枚举类型，表示MQTT断开的原因 */
@@ -151,10 +142,10 @@ void onMqttDisconnect(AsyncMqttClientDisconnectReason reason)
 #if _MY_MQTT_LOGLEVEL_ >= 1
     Serial.println("Disconnected from MQTT.");
     
-    // if (WiFi.isConnected())
-    // {
-    //     xTimerStart(mqttReconnectTimer, 0);
-    // }   
+    if (WiFi.isConnected())
+    {
+        xTimerStart(mqttReconnectTimer, 0);
+    }   
 
 #endif
 }
@@ -270,7 +261,7 @@ void MQTT_Init(void)
 
 void mqttSendDeviceData(void)
 {
-    vTaskDelay(deviceID / portTICK_PERIOD_MS);
+    vTaskDelay(pdMS_TO_TICKS(deviceID));
     // 创建 JSON 文档
     StaticJsonDocument<200> doc;
     doc["deviceID"] = deviceID;

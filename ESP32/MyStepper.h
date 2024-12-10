@@ -2,9 +2,11 @@
 #define __MYSTEPPER_H__
 #include "AccelStepper.h"
 
+#define CIRCLE_PULS          6400         //电机旋转一圈的脉冲数
+
 class MyStepper : public AccelStepper {
 public:
-    MyStepper(int stepPin, int dirPin, int resetPin, int shellDetPin, uint32_t CIRCLE_Puls);
+    MyStepper(int stepPin, int dirPin, int resetPin, int shellDetPin, uint32_t CIRCLE_Puls = CIRCLE_PULS);
     bool Init(void);
     bool load(void);
 private:

@@ -36,7 +36,7 @@ void connectToWiFi(int index)
         // 等待连接
         int attempts = 0;
         while (WiFi.status() != WL_CONNECTED && attempts < 10) { // 最多尝试10次
-            delay(500);
+            vTaskDelay(pdMS_TO_TICKS(500));
             Serial.print(".");
             attempts++;
         }
@@ -77,7 +77,7 @@ void handleRoot()
 
 void handleRestart() {
     server.send(200, "text/html", "ESP32 is restarting...");
-    delay(1000); // 给用户一点时间看到消息
+    vTaskDelay(pdMS_TO_TICKS(1000)); // 给用户一点时间看到消息
     ESP.restart(); // 执行重启
 }
 

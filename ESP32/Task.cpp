@@ -32,7 +32,7 @@ void serial_Task(void *parameter)
             }
         }
         Stack_Debug();
-        vTaskDelay(1000 / portTICK_PERIOD_MS); // 防止任务占用过多 CPU
+        vTaskDelay(pdMS_TO_TICKS(1000)); // 防止任务占用过多 CPU
         g_doc.clear();
     }
 }

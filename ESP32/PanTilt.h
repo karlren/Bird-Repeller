@@ -19,9 +19,9 @@ private:
     int baud;
     int sendInterval;
     int maxSendNumber;
-    float horizontalAngle;      /* 水平角度 */
-    float verticalAngle;        /* 垂直角度 */
-    SoftwareSerial PanTiltSerial; // RX, TX
+    float panAngle;                 /* 水平角度 */
+    float tiltAngle;                /* 垂直角度 */
+    SoftwareSerial PanTiltSerial;   // RX, TX
     byte PTaddr;
     int readPanTiltData(byte *receivedData);
     bool comparisonCommand(byte *command1, byte *command2, byte length);
