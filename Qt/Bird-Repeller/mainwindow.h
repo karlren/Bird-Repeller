@@ -3,9 +3,10 @@
 
 #include <QMainWindow>
 #include <mqtt/qmqttclient.h>
+#include "mqttsettingswidget.h"
+#include "settingdevicewidget.h"
+#include "deviceConfig.h"
 #include <QMessageBox>          /* 弹窗警告 */
-#include <QJsonObject>
-#include <QJsonDocument>
 #include <QPushButton>
 #include <QLabel>
 #include <QRadioButton>
@@ -14,7 +15,6 @@
 #include <QVBoxLayout>
 #include <QKeyEvent>
 #include <QDebug>
-#include "mqttsettingswidget.h"
 #include <QSpinBox>             /* 数值输入框 */
 #include <QDoubleSpinBox>
 #include <QComboBox>
@@ -22,6 +22,7 @@
 #include <QGroupBox>
 #include <QComboBox>
 #include <QPlainTextEdit>
+#include <QSlider>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -35,15 +36,22 @@ public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
+    bool send_mqtt_command(const QString &method, QJsonObject params = QJsonObject(), int id = 0);
+    bool send_mqtt_command(const QString &method, int id);
+
 private:
     Ui::MainWindow *ui;
     MqttSettingsWidget *mqttSettingsWidget;
+    SettingDeviceWidget *pSettingDeviceWidget;
 
     QPushButton *loadingButton;             /* 装弹按钮 */
     QPushButton *resettingButton;           /* 复位按钮 */
     QPushButton *connectButton;             /* MQTT连接按钮 */
     QPushButton *inquireButton;             /* 查询角度按钮 */
     QPushButton *deviceQueryButton;         /* 设备查询按钮 */
+    QPushButton *ignitionButton;            /* 点火按钮 */
+    QPushButton *cleanBarrelButton;         /* 清理炮管按钮 */
+    QPushButton *SelfTestButton;            /* 自检按钮 */
 
     QButtonGroup *PTcontrolButtonGruop;     /* 云台控制按键组 */
     QPushButton *upButton;                  /* 云台控制向上按键 */
@@ -58,8 +66,6 @@ private:
 
     QPushButton *PTSetPanAngleButton;       /* 云台水平角度设置 */
     QPushButton *PTSetTiltAngleButton;      /* 云台俯仰角度设置 */
-
-    QGroupBox *deviceGroupBox;
 
     QComboBox *deviceComboBox;              /* 设备选择下拉 */
 
@@ -78,25 +84,33 @@ private:
     QDoubleSpinBox *PTSetPanAngleDoubleSpinBox; /* 云台水平角度设置浮点数数据框 */
     QDoubleSpinBox *PTSetTiltAngleDoubleSpinBox;/* 云台俯仰角度设置浮点数数据框 */
 
+    QSlider *PTSetPanAngleSlider;           /* 云台水平角度设置滑动条 */
+    QSlider *PTSetTiltAngleSlider;          /* 云台俯仰角度设置滑动条 */
+
     QPlainTextEdit *recvMessagesPlainTextEdit;  /* 接收MQTT消息展示框 */
     QPushButton *clearRecvMessageButton;
 
-    bool send_mqtt_command(const QString &method, QJsonObject params = QJsonObject(), int id = 0);
-    bool send_mqtt_command(const QString &method, int id);
+    QLineEdit *sendCommandMethodLineEdit;                    /* 发送任务输入行 */
+    QTextEdit *sendCommandparamsTextEdit;              /* 发送参数输入 */
 
 protected:
     QMqttClient *pMqttClient;
     MqttSettingsWidget *pMqttSettingsWidget;
     /* 声明 keyPressEvent */
     void keyPressEvent(QKeyEvent *event) override;
+    void closeEvent(QCloseEvent *event) override;
 private slots:
     void updateLogStateChange();    /* 客户端状态发生改变 */
     void recv_message(const QByteArray &message, const QMqttTopicName &topic);  /* 客户端接受消息 */
     void openMqttSettingsWidget();
+    void openSettingsDeviceWidget();
     void connectButton_clicked();
     void loadingButton_clicked();
     void resettingButton_clicked();
     void inquireButton_clicked();
+    void ignitionButton_clicked();
+    void cleanBarrelButton_clicked();
+    void SelfTestButton_clicked();
     void deviceButton_clicked(int id);
     void PTcontrolButton_clicked(int id);
     void PTPresetPointSetButton_clicked();

@@ -18,14 +18,18 @@ DEFINES += QT_DEPRECATED_WARNINGS
 SOURCES += \
     main.cpp \
     mainwindow.cpp \
-    mqttsettingswidget.cpp
+    mqttsettingswidget.cpp \
+    settingdevicewidget.cpp
 
 HEADERS += \
+    deviceConfig.h \
     mainwindow.h \
-    mqttsettingswidget.h
+    mqttsettingswidget.h \
+    settingdevicewidget.h
 
 FORMS += \
-    mainwindow.ui
+    mainwindow.ui \
+    settingdevicewidget.ui
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

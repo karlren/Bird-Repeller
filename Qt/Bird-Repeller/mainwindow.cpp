@@ -8,18 +8,21 @@ MainWindow::MainWindow(QWidget *parent)
     , ui(new Ui::MainWindow)
 {
     pMqttSettingsWidget = new MqttSettingsWidget();
+    pSettingDeviceWidget = new SettingDeviceWidget(this);
 
     ui->setupUi(this);
 
-    this->resize(1200, 600);        /* 设置窗口大小 */
-    this->setMinimumSize(1200, 600);
-    this->setMaximumSize(1200, 600);
+    this->resize(1500, 600);        /* 设置窗口大小 */
+    this->setMinimumSize(1500, 600);
+    this->setMaximumSize(1500, 600);
     setWindowTitle("驱鸟炮塔控制");   /* 设置窗口名称 */
     /* 创建菜单栏 */
     QMenuBar *menuBar = this->menuBar();
     /* 创建菜单项 */
     QAction *mqttSettingsAction = menuBar->addAction("MQTT配置");
     connect(mqttSettingsAction, &QAction::triggered, this, &MainWindow::openMqttSettingsWidget);
+    QAction *settingsDeviceAction = menuBar->addAction("查询设备配置信息");
+    connect(settingsDeviceAction, &QAction::triggered, this, &MainWindow::openSettingsDeviceWidget);
 
     /* 设置控件字体和大小 */
     QFont windowFont("得意黑", 16);
@@ -43,6 +46,21 @@ MainWindow::MainWindow(QWidget *parent)
     resettingButton->setGeometry(270, 200, 150, 80);
     connect(resettingButton, &QPushButton::clicked, this, &MainWindow::resettingButton_clicked);
 
+    /* 点火按钮 */
+    ignitionButton = new QPushButton("点火", this);
+    ignitionButton->setGeometry(270, 300, 150, 80);
+    connect(ignitionButton, &QPushButton::clicked, this, &MainWindow::ignitionButton_clicked);
+
+    /* 清理炮管按钮 */
+    cleanBarrelButton = new QPushButton("清理炮管", this);
+    cleanBarrelButton->setGeometry(270, 400, 150, 80);
+    connect(cleanBarrelButton, &QPushButton::clicked, this, &MainWindow::cleanBarrelButton_clicked);
+
+    /* 云台自检按钮 */
+    SelfTestButton = new QPushButton("云台自检", this);
+    SelfTestButton->setGeometry(430, 100, 150, 80);
+    connect(SelfTestButton, &QPushButton::clicked, this, &MainWindow::SelfTestButton_clicked);
+
     /* 角度查询按钮 */
     inquireButton = new QPushButton("角度查询", this);
     inquireButton->setGeometry(600, 100, 150, 80);
@@ -55,11 +73,11 @@ MainWindow::MainWindow(QWidget *parent)
     /* 设备选择下拉框 */
     deviceComboBox = new QComboBox(this);
     deviceComboBox->addItem("所有设备");
-    for (int i = 1; i <= 5; ++i) {
+    for (int i = 1; i <= DEVICE_NUMBER; ++i) {
         deviceComboBox->addItem(QString("设备%1").arg(i));
     }
     deviceComboBox->setGeometry(50, 130, 180, 50);
-    deviceComboBox->setCurrentIndex(1);
+    deviceComboBox->setCurrentIndex(2);
 //    connect(deviceComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::deviceComboBox_indexChanged);
 
     /* 设备查询按键 */
@@ -130,9 +148,9 @@ MainWindow::MainWindow(QWidget *parent)
     PTSetPanAngleLabel->setGeometry(720, 220, 200, 60);
     PTSetPanAngleDoubleSpinBox = new QDoubleSpinBox(this);
     PTSetPanAngleDoubleSpinBox->setGeometry(880, 220, 150, 60);
-    PTSetPanAngleDoubleSpinBox->setRange(-60.00, 60.00);
+    PTSetPanAngleDoubleSpinBox->setRange(0.00, 120.00);
     PTSetPanAngleDoubleSpinBox->setSingleStep(0.5);
-    PTSetPanAngleDoubleSpinBox->setValue(0.0);
+    PTSetPanAngleDoubleSpinBox->setValue(60.0);
     PTSetPanAngleButton = new QPushButton("设置", this);
     PTSetPanAngleButton->setGeometry(1050, 220, 120, 60);
 
@@ -140,11 +158,49 @@ MainWindow::MainWindow(QWidget *parent)
     PTSetTiltAngleLabel->setGeometry(720, 280, 200, 60);
     PTSetTiltAngleDoubleSpinBox = new QDoubleSpinBox(this);
     PTSetTiltAngleDoubleSpinBox->setGeometry(880, 280, 150, 60);
-    PTSetTiltAngleDoubleSpinBox->setRange(-20.00, 90.00);
+    PTSetTiltAngleDoubleSpinBox->setRange(0.00, 90.00);
     PTSetTiltAngleDoubleSpinBox->setSingleStep(0.5);
     PTSetTiltAngleDoubleSpinBox->setValue(0.0);
     PTSetTiltAngleButton = new QPushButton("设置", this);
     PTSetTiltAngleButton->setGeometry(1050, 280, 120, 60);
+
+    /* 云台水平角度控制滑动条 */
+    PTSetPanAngleSlider = new QSlider(Qt::Horizontal, this);
+    PTSetPanAngleSlider->setGeometry(1210, 100, 200, 20);
+    PTSetPanAngleSlider->setRange(0.0, 120.0);
+    PTSetPanAngleSlider->setSingleStep(1);
+    PTSetPanAngleSlider->setTracking(false);
+    PTSetPanAngleSlider->setValue(60.0);
+    connect(PTSetPanAngleSlider, &QSlider::sliderMoved, this, [this](int value){
+        PTSetPanAngleDoubleSpinBox->setValue(value);
+    });
+    connect(PTSetPanAngleSlider, &QSlider::valueChanged, this, [this](int value){
+        PTSetPanAngleDoubleSpinBox->setValue(value);
+    });
+    connect(PTSetPanAngleDoubleSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            [this](double value) {
+        PTSetPanAngleSlider->setValue(static_cast<int>(value));
+    });
+    connect(PTSetPanAngleSlider, &QSlider::sliderReleased, this, &MainWindow::PTSetPanAngleButton_clicked);
+
+    /* 云台俯仰角度控制滑动条 */
+    PTSetTiltAngleSlider = new QSlider(Qt::Vertical, this);
+    PTSetTiltAngleSlider->setGeometry(1300, 140, 20, 200);
+    PTSetTiltAngleSlider->setRange(0.0, 90.0);
+    PTSetTiltAngleSlider->setTracking(false);
+    PTSetTiltAngleSlider->setInvertedAppearance(true);
+    PTSetTiltAngleSlider->setValue(0.0);
+    connect(PTSetTiltAngleSlider, &QSlider::sliderMoved, this, [this](int value){
+        PTSetTiltAngleDoubleSpinBox->setValue(value);
+    });
+    connect(PTSetTiltAngleSlider, &QSlider::valueChanged, this, [this](int value){
+        PTSetTiltAngleDoubleSpinBox->setValue(value);
+    });
+    connect(PTSetTiltAngleDoubleSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            [this](double value) {
+        PTSetTiltAngleSlider->setValue(static_cast<int>(value));
+    });
+    connect(PTSetTiltAngleSlider, &QSlider::sliderReleased, this, &MainWindow::PTSetTiltAngleButton_clicked);
 
     /* 消息返回 */
     messageReturnLabel = new QLabel("消息返回", this);
@@ -163,6 +219,13 @@ MainWindow::MainWindow(QWidget *parent)
     connect(PTSetPanAngleButton, &QPushButton::clicked, this, &MainWindow::PTSetPanAngleButton_clicked);
     connect(PTSetTiltAngleButton, &QPushButton::clicked, this, &MainWindow::PTSetTiltAngleButton_clicked);
 
+
+    /* 发送命令 */
+//    sendCommandMethodLineEdit = new QLineEdit(this);
+//    sendCommandMethodLineEdit->setGeometry(1200, 360, 200, 50);
+//    sendCommandparamsTextEdit = new QTextEdit(this);
+//    sendCommandparamsTextEdit->setGeometry(1200, 430, 200, 150);
+
     /* 连接客户端状态变化信号 */
     connect(pMqttClient, &QMqttClient::stateChanged, this, &MainWindow::updateLogStateChange);
     /* 连接客户端订阅消息信号 */
@@ -177,7 +240,10 @@ MainWindow::MainWindow(QWidget *parent)
 MainWindow::~MainWindow()
 {
     pMqttClient->disconnectFromHost();
+    pMqttSettingsWidget->close();
     delete pMqttSettingsWidget;
+    pSettingDeviceWidget->close();
+    delete pSettingDeviceWidget;
     delete ui;
 }
 
@@ -240,15 +306,22 @@ void MainWindow::recv_message(const QByteArray &message, const QMqttTopicName &t
             if (result.contains("id")) {
                 int id = result["id"].toInt();
                 switch (id) {   /* 根据JSON中的id键值判断是哪个任务的返回 */
-                case 1:
+                case DEVICE_CONFIG_QUERY:
+                    if (pSettingDeviceWidget->deviceDataAnalysis(result)) {
+                        recvMessagesPlainTextEdit->appendPlainText("解析设备配置信息成功");
+                        pSettingDeviceWidget->setDeviceID(deviceComboBox->currentIndex());
+                        pSettingDeviceWidget->show();
+                    } else {
+                        recvMessagesPlainTextEdit->appendPlainText("解析设备配置信息失败");
+                    }
+                    break;
+                case ANGLE_QUERY_ID:    /* 如果是查询角度命令 */
                     g_deviceAngles[result["deviceID"].toInt()].panAngle = result["panAngle"].toDouble();
                     g_deviceAngles[result["deviceID"].toInt()].tiltAngle = result["tiltAngle"].toDouble();
                     if (deviceID == result["deviceID"].toInt()) {
                         panAngleLabel->setText("水平角度：" + QString::number(g_deviceAngles[deviceID].panAngle, 'f', 2));
                         tiltAngleLabel->setText("俯仰角度：" + QString::number(g_deviceAngles[deviceID].tiltAngle, 'f', 2));
                     }
-                    break;
-                case 2:
                     break;
                 default:
                     break;
@@ -288,6 +361,14 @@ void MainWindow::openMqttSettingsWidget()
     pMqttSettingsWidget->show();
 }
 
+void MainWindow::openSettingsDeviceWidget()
+{
+    QJsonObject params;
+    params["way"] = "read";
+    send_mqtt_command("configDeviceInformation", params, DEVICE_CONFIG_QUERY);
+//    pSettingDeviceWidget->show();
+}
+
 void MainWindow::connectButton_clicked()
 {
     pMqttClient->setHostname(pMqttSettingsWidget->getServerAddr());     /* 设置主机IP */
@@ -317,10 +398,27 @@ void MainWindow::resettingButton_clicked()
 {
     send_mqtt_command("StepperHoming");
 }
-/* 角度查询 id:1 */
+
 void MainWindow::inquireButton_clicked()
 {
-    send_mqtt_command("getPTAngle", 1);
+    send_mqtt_command("getPTAngle", ANGLE_QUERY_ID);
+}
+
+void MainWindow::ignitionButton_clicked()
+{
+    send_mqtt_command("ignition");
+}
+
+void MainWindow::cleanBarrelButton_clicked()
+{
+    send_mqtt_command("cleanBarrel");
+}
+
+void MainWindow::SelfTestButton_clicked()
+{
+    QJsonObject params;
+    params["command"] = 1;
+    send_mqtt_command("PanTiltControl", params);
 }
 
 void MainWindow::deviceButton_clicked(int id)
@@ -348,19 +446,23 @@ void MainWindow::PTcontrolButton_clicked(int id)
         break;
     case 1:
         params["command"] = 6;
+        params["param1"] = PTcontrolSpeedSpinBox->value();
         params["param2"] = PTcontrolSpeedSpinBox->value();
         break;
     case 2:
         params["command"] = 7;
+        params["param1"] = PTcontrolSpeedSpinBox->value();
         params["param2"] = PTcontrolSpeedSpinBox->value();
         break;
     case 3:
         params["command"] = 5;
         params["param1"] = PTcontrolSpeedSpinBox->value();
+        params["param2"] = PTcontrolSpeedSpinBox->value();
         break;
     case 4:
         params["command"] = 4;
         params["param1"] = PTcontrolSpeedSpinBox->value();
+        params["param2"] = PTcontrolSpeedSpinBox->value();
         break;
     }
     send_mqtt_command("PanTiltControl", params);
@@ -403,25 +505,33 @@ void MainWindow::PTPresetPointDeleteButton_clicked()
 void MainWindow::PTSetPanAngleButton_clicked()
 {
     double value = PTSetPanAngleDoubleSpinBox->value();
+    if (value >= 0.0f) {
+        value /= 2.56f;
+    } else {
+        value += 360.0f;
+        value /= 2.56f;
+    }
+
+
     int integerPart = static_cast<int>(std::floor(value));
     int decimalPart = static_cast<int>((value - integerPart) * 100);
     QJsonObject params;
     params["command"] = 20;
-    params["params1"] = integerPart;
-    params["params2"] = decimalPart;
+    params["param1"] = integerPart;
+    params["param2"] = decimalPart;
 
     send_mqtt_command("PanTiltControl", params);
 }
 
 void MainWindow::PTSetTiltAngleButton_clicked()
 {
-    double value = PTSetPanAngleDoubleSpinBox->value();
+    double value = PTSetTiltAngleDoubleSpinBox->value() / 2.56f;
     int integerPart = static_cast<int>(std::floor(value));
     int decimalPart = static_cast<int>((value - integerPart) * 100);
     QJsonObject params;
     params["command"] = 21;
-    params["params1"] = integerPart;
-    params["params2"] = decimalPart;
+    params["param1"] = integerPart;
+    params["param2"] = decimalPart;
 
     send_mqtt_command("PanTiltControl", params);
 }
@@ -469,4 +579,15 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
     }
     /* 如果有默认的处理操作，可以调用基类的方法 */
        QWidget::keyPressEvent(event);
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    if (pSettingDeviceWidget) {
+        pSettingDeviceWidget->close();
+    }
+    if (pMqttSettingsWidget) {
+        pMqttSettingsWidget->close();
+    }
+    event->accept();
 }
