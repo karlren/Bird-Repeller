@@ -27,5 +27,7 @@ build-*/
 *.docx
 *.xlsx
 GPT/
-**/mainwindows.ui
+
 .gitignore
+# 忽略python的编译文件
+**/__pycache__
