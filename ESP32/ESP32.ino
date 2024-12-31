@@ -17,6 +17,8 @@ void LED_Task(void *parameter);
 
 void setup() {
     Serial.begin(115200);
+    xTaskCreate(LED_Task, "LED_Task", 2048, NULL, 0, NULL);
+    xTaskCreate(serial_Task, "SerialTask", 8192, NULL, 3, NULL);
     deviceInit();
     httpOTA_Init();
     MQTT_Init();
