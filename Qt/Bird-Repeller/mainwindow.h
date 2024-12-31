@@ -23,6 +23,7 @@
 #include <QComboBox>
 #include <QPlainTextEdit>
 #include <QSlider>
+#include <QCheckBox>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -52,6 +53,7 @@ private:
     QPushButton *ignitionButton;            /* 点火按钮 */
     QPushButton *cleanBarrelButton;         /* 清理炮管按钮 */
     QPushButton *SelfTestButton;            /* 自检按钮 */
+    QPushButton *deviceResetButton;         /* 设备复位按钮 */
 
     QButtonGroup *PTcontrolButtonGruop;     /* 云台控制按键组 */
     QPushButton *upButton;                  /* 云台控制向上按键 */
@@ -93,6 +95,14 @@ private:
     QLineEdit *sendCommandMethodLineEdit;                    /* 发送任务输入行 */
     QTextEdit *sendCommandparamsTextEdit;              /* 发送参数输入 */
 
+    QPushButton *shootButton;               /* 射击按钮 */
+    QCheckBox *ignitionTimeCheckBox;        /* 点火时间使能选项 */
+    QCheckBox *cleanTimeCheckBox;           /* 气泵清理使能选项 */
+    QCheckBox *waitTimeCheckBox;            /* 点火时间输入框 */
+    QLineEdit *ignitionTimeLineEdit;        /* 点火时间输入框 */
+    QLineEdit *cleanTimeLineEdit;           /* 气泵清理时间输入框 */
+    QLineEdit *waitTimeLineEdit;            /* 气泵清理时间输入框 */
+
 protected:
     QMqttClient *pMqttClient;
     MqttSettingsWidget *pMqttSettingsWidget;
@@ -111,6 +121,7 @@ private slots:
     void ignitionButton_clicked();
     void cleanBarrelButton_clicked();
     void SelfTestButton_clicked();
+    void deviceResetButton_clicked();
     void deviceButton_clicked(int id);
     void PTcontrolButton_clicked(int id);
     void PTPresetPointSetButton_clicked();
@@ -120,6 +131,7 @@ private slots:
     void PTSetTiltAngleButton_clicked();
     void deviceComboBox_indexChanged(int index);
     void deviceQueryButton_chicked();
+    void shootButton_clicked();
 };
 
 struct DeviceAngle {

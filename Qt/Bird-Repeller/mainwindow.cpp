@@ -61,6 +61,11 @@ MainWindow::MainWindow(QWidget *parent)
     SelfTestButton->setGeometry(430, 100, 150, 80);
     connect(SelfTestButton, &QPushButton::clicked, this, &MainWindow::SelfTestButton_clicked);
 
+    /* 设备复位按钮 */
+    deviceResetButton = new QPushButton("esp32复位", this);
+    deviceResetButton->setGeometry(270, 500, 150, 80);
+    connect(deviceResetButton, &QPushButton::clicked, this, &MainWindow::deviceResetButton_clicked);
+
     /* 角度查询按钮 */
     inquireButton = new QPushButton("角度查询", this);
     inquireButton->setGeometry(600, 100, 150, 80);
@@ -218,6 +223,32 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(PTSetPanAngleButton, &QPushButton::clicked, this, &MainWindow::PTSetPanAngleButton_clicked);
     connect(PTSetTiltAngleButton, &QPushButton::clicked, this, &MainWindow::PTSetTiltAngleButton_clicked);
+
+
+    shootButton = new QPushButton("射击", this);
+    shootButton->setGeometry(1250, 500, 150, 80);
+    connect(shootButton, &QPushButton::clicked, this, &MainWindow::shootButton_clicked);
+
+    ignitionTimeCheckBox = new QCheckBox("点火开关使能", this);
+    ignitionTimeCheckBox->setGeometry(1300, 390, 200, 50);
+    ignitionTimeCheckBox->setChecked(true);
+
+    ignitionTimeLineEdit = new QLineEdit("50", this);
+    ignitionTimeLineEdit->setGeometry(1180, 390, 100, 50);
+
+    cleanTimeCheckBox = new QCheckBox("气泵使能", this);
+    cleanTimeCheckBox->setGeometry(1300, 440, 200, 50);
+    cleanTimeCheckBox->setChecked(true);
+
+    cleanTimeLineEdit = new QLineEdit("1000", this);
+    cleanTimeLineEdit->setGeometry(1180, 440, 100, 50);
+
+    waitTimeCheckBox = new QCheckBox("击发等待", this);
+    waitTimeCheckBox->setGeometry(1300, 340, 200, 50);
+    waitTimeCheckBox->setChecked(false);
+
+    waitTimeLineEdit = new QLineEdit("1000", this);
+    waitTimeLineEdit->setGeometry(1180, 340, 100, 50);
 
 
     /* 发送命令 */
@@ -421,6 +452,11 @@ void MainWindow::SelfTestButton_clicked()
     send_mqtt_command("PanTiltControl", params);
 }
 
+void MainWindow::deviceResetButton_clicked()
+{
+    send_mqtt_command("reset");
+}
+
 void MainWindow::deviceButton_clicked(int id)
 {
     if (id == 0) {
@@ -554,6 +590,24 @@ void MainWindow::deviceComboBox_indexChanged(int index)
 void MainWindow::deviceQueryButton_chicked()
 {
     send_mqtt_command("getDeviceData");
+}
+
+void MainWindow::shootButton_clicked()
+{
+    QJsonObject params;
+    params["command"] = 20;
+    params["panAngle"] = PTSetPanAngleDoubleSpinBox->value();
+    params["tiltAngle"] = PTSetTiltAngleDoubleSpinBox->value();
+    if (waitTimeCheckBox->checkState()) {
+        params["waitTime"] = waitTimeLineEdit->text().trimmed().toInt();
+    }
+    if (ignitionTimeCheckBox->checkState()) {
+        params["ignitionTime"] = ignitionTimeLineEdit->text().trimmed().toInt();
+    }
+    if (cleanTimeCheckBox->checkState()) {
+        params["cleanTime"] = cleanTimeLineEdit->text().trimmed().toInt();
+    }
+    send_mqtt_command("shoot", params);
 }
 
 void MainWindow::keyPressEvent(QKeyEvent *event)
