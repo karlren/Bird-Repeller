@@ -23,8 +23,6 @@ void setup() {
     httpOTA_Init();
     MQTT_Init();
     MyWiFi_Init();
-    xTaskCreate(LED_Task, "LED_Task", 2048, NULL, 0, NULL);
-    xTaskCreate(serial_Task, "SerialTask", 2048, NULL, 3, NULL);
 }
 
 void loop() {
