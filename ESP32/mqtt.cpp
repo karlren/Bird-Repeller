@@ -6,11 +6,10 @@
 #include "deviceData.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/timers.h"
+#include <HTTPClient.h>
+#include <time.h>
 
-/* 清除数据引脚，开机时接低电平就会清空flash中存储的MQTT数据 */
-/* 15引脚可能有点问题，在烧录的时候会读到低电平，导致每次烧录的时候都会清空flash存储的数据，具体是不是引脚的问题还没测 */
-/* 到时候可以用上拉电阻试一下，目前为悬空状态 */
-static const int Clear_Button_Pin = 15;
+static int mqttConnectionTimes = 0; /* MQTT连接次数，超过5次自动重启 */
 
 void onMqttMessage(char* topic, char* payload, const AsyncMqttClientMessageProperties& properties,
                    const size_t& len, const size_t& index, const size_t& total);
@@ -133,21 +132,25 @@ void onMqttConnect(bool sessionPresent)
     Serial.println(sessionPresent);
 #endif
     mqttSendDeviceData();
+    mqttConnectionTimes = 0;
     MQTT_Subscribe_Topics("esp32/control", 0);
 }
 
 /* MQTT断开时的回调函数，reason是一个枚举类型，表示MQTT断开的原因 */
 void onMqttDisconnect(AsyncMqttClientDisconnectReason reason)
 {
+    mqttConnectionTimes++;
+    if (mqttConnectionTimes >= 10) {
+        ESP.restart();
+    }
 #if _MY_MQTT_LOGLEVEL_ >= 1
     Serial.println("Disconnected from MQTT.");
-    
-    if (WiFi.isConnected())
-    {
-        xTimerStart(mqttReconnectTimer, 0);
-    }   
-
 #endif
+    if (WiFi.isConnected()) {
+        xTimerStart(mqttReconnectTimer, 0);
+    } else {
+        xTimerStart(wifiReconnectTimer, 0);
+    }
 }
 
 /* MQTT订阅成功的回调函数，packetId是MQTT订阅的标识符，qos是信息传递的可靠级别 */
@@ -181,20 +184,77 @@ void onMqttPublish(const uint16_t& packetId)
     Serial.println(packetId);
 #endif
 }
+JsonObject location(JsonObject params)
+{
+    static DynamicJsonDocument errorDoc(128);
+    DynamicJsonDocument sendDoc(2048);
+    DynamicJsonDocument rep(4096);
+    HTTPClient http;
+    String sendMessage;
+    String recvPayload;
+    int n = WiFi.scanNetworks();
+    if (n < 0) {
+        JsonObject error = errorDoc.to<JsonObject>();
+        error["error"]["message"] = "周围无WiFi连接";
+        // error["deviceID"] = deviceID;
+        return error;
+    }
+    sendDoc["timestamp"] = time(NULL);
+    sendDoc["id"] = mqttUsername;
+    sendDoc["asset"]["id"] = mqttUsername;
+    for(int i = 0; i < n; i++)
+    {
+        sendDoc["location"]["wifis"][i]["macAddress"] = WiFi.BSSIDstr(i);
+        sendDoc["location"]["wifis"][i]["signalStrength"] = WiFi.RSSI(i);
+    }
+    serializeJson(sendDoc, sendMessage);
+    static DynamicJsonDocument dOc(128); 
+    JsonObject resu1t = dOc.to<JsonObject>();
+    http.begin("https://api.newayz.com/location/hub/v1/track_points?access_key=lpWs3Pk2gaNcvUUYcZBWqin1l7fi6BTo");      
+    http.addHeader("Content-Type", "application/json");
+    http.addHeader("Host", "api.newayz.com");
+    http.addHeader("Connection", "keep-alive");
+    int httpCode = http.POST(sendMessage);
+    String payload = http.getString();
+    DeserializationError error = deserializeJson(rep, payload);
+serializeJson(rep, recvPayload);  // 将 JSON 文档序列化为字符串
+Serial.println(recvPayload);      // 打印字符串
+    if (error) 
+    {
+        JsonObject error = errorDoc.to<JsonObject>();
+        error["error"]["message"] = "服务器返回JSON数据解析错误";
+        error["deviceID"] = deviceID;
+        return error;
+    }
+    String address = rep["location"]["address"]["name"].as<String>();
+    String place = rep["location"]["place"]["name"].as<String>();
+    double longitude = rep["location"]["position"]["point"]["longitude"];
+    double latitude = rep["location"]["position"]["point"]["latitude"];
+    static DynamicJsonDocument doc(128); 
+    JsonObject result = doc.to<JsonObject>();
+    resu1t["location"]["address"] = address;
+    resu1t["location"]["place"] = place;
+    resu1t["position"]["longitude"] = longitude;
+    resu1t["position"]["latitude"] = latitude;
+    resu1t["deviceID"] = deviceID;
+    result["deviceID"] = deviceID;
+    String output;
+    serializeJson(dOc, output);
+    MQTT_Publish_Message("deviceData/address", 2, 1, output.c_str());
+
+    Preferences locationPreferences;
+    locationPreferences.begin("location", false);
+    latitude = locationPreferences.putDouble("latitude", latitude);
+    longitude = locationPreferences.putDouble("longitude", longitude);
+    locationPreferences.end();
+    return result;
+}
 
 
 void MQTT_Init(void)
 {
     /* 初始化 Preferences */
     mqtt_preferences.begin("mqtt", false);
-
-    // 检查Clear_Button_Pin引脚状态
-    // pinMode(Clear_Button_Pin, INPUT);
-    // if (digitalRead(Clear_Button_Pin) == LOW) {
-    //     clear_mqtt_Preferences(); // 清除Flash中的内容
-    //     Serial.println("MQTT Preferences cleared.\n");
-    //     Serial.printf("\n\n\n\n\n\n\n\n");
-    // }
 
     /* 检查是否已经保存过服务器配置 */
     if (mqtt_preferences.isKey("host")) {
@@ -256,6 +316,9 @@ void MQTT_Init(void)
     }
     if (!rpc.registerProcedure(mqttSaveUserConfig, "saveMQTTUser")) {
         Serial.println("注册mqttSaveUserConfig函数失败");
+    }
+    if (!rpc.registerProcedure(location, "location")) {
+        Serial.println("注册location函数失败");
     }
 }
 
@@ -362,6 +425,9 @@ void mqttTask(void* pvParameters)
 void onMqttMessage(char* topic, char* payload, const AsyncMqttClientMessageProperties& properties,
                    const size_t& len, const size_t& index, const size_t& total)
 {
+    if (len == 0 || len == 1) {
+        return;
+    }
     payload[len] = '\0';
     // 将接收到的消息转为String
     String message = String((char*)payload);

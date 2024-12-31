@@ -6,11 +6,6 @@
 #include <Preferences.h>
 #include "deviceData.h"
 
-/* 清除数据引脚，开机时接低电平就会清空flash中存储的OTA数据 */
-/* 15引脚可能有点问题，在烧录的时候会读到低电平，导致每次烧录的时候都会清空flash存储的数据，具体是不是引脚的问题还没测 */
-/* 到时候可以用上拉电阻试一下，目前为悬空状态 */
-static const int Clear_Button_Pin = 15;
-
 static const char* versionUrl = "http://139.9.223.99/files/OTA/version.json";
 static String currentVersion = "1.0.1"; // 当前版本
 
@@ -35,16 +30,8 @@ static void httpOTA_ClearVersionInfo(void)
 /* 读取代码中和flash中最新的版本号，可以放在初始化最前面 */
 void httpOTA_Init(void)
 {
-    // pinMode(Clear_Button_Pin, INPUT);
     static int major = 0, minor = 0, patch = 0;
     httpOTA_preferences.begin("httpOTA", false); // 初始化Preferences
-
-    // 检查Clear_Button_Pin引脚状态
-    // if (digitalRead(Clear_Button_Pin) == LOW) {
-    //     httpOTA_ClearVersionInfo(); // 清除Flash中的内容
-    //     Serial.println("httpOTA Preferences cleared.\n");
-    //     Serial.printf("\n\n\n\n\n\n\n\n");
-    // }
 
     int firstDot = currentVersion.indexOf('.');
     int secondDot = currentVersion.indexOf('.', firstDot + 1);
@@ -133,6 +120,7 @@ static bool checkForUpdate(String &firmwareUrl) {
             char output[size + 1];
             serializeJson(doc, output, size + 1);
             MQTT_Publish_Message("esp32/deviceList", 2, 0, output);
+            vTaskDelay(pdMS_TO_TICKS(500));
             return true;
         } else {
             return false;
