@@ -18,6 +18,7 @@ Preferences devicePreferences;
 
 PanTilt PT(18, 19);
 MyStepper stepper(stepPin, dirPin, resetPin, shellDetPin);
+TowerConfig towerConfig("/tower_config.json");
 
 // TimerHandle_t angleReturnTimer;               /*角度回传的定时器*/
 
@@ -33,7 +34,19 @@ JsonObject changeDeviceID(JsonObject params);
 bool deviceInit(void)
 {
     PT.begin(9600);
+towerConfig.begin();
     GetDeviceData();
+    ignitionMutex = xSemaphoreCreateMutex();
+    cleanBarrelMutex = xSemaphoreCreateMutex();
+
+    pinMode(ignitionPin, OUTPUT);
+    digitalWrite(ignitionPin, !ignitionPinValidBit);
+    pinMode(cleanBarrelPin, OUTPUT);
+    digitalWrite(cleanBarrelPin, !cleanBarrelPinValidBit);
+
+    if (!rpc.registerProcedure(reset, "reset")) {
+        Serial.println("函数reset注册失败");
+    }
     if (!rpc.registerProcedure(PanTiltControl, "PanTiltControl")) {
         Serial.println("函数PanTiltControl注册失败");
     }
@@ -171,12 +184,26 @@ JsonObject StepperHoming(JsonObject params)
 
 JsonObject getDeviceData(JsonObject params)
 {
+    double latitude, longitude, altitude;
     static DynamicJsonDocument doc(128); 
     static DynamicJsonDocument errorDoc(128);
     JsonObject result = doc.to<JsonObject>();
+    Preferences locationPreferences;
+    locationPreferences.begin("location", false);
+    latitude = locationPreferences.getDouble("latitude", 0);
+    longitude = locationPreferences.getDouble("longitude", 0);
+    altitude = locationPreferences.getDouble("altitude", 0);
+    locationPreferences.end();
+    
     result["IP"] = WiFi.localIP().toString();
     result["edition"] = String(currentmajor) + "." + String(currentminor) + "." + String(currentpatch);
     result["deviceID"] = deviceID;
+result["location"]["latitude"] = latitude;
+    result["location"]["longitude"] = longitude;
+    result["location"]["altitude"] = altitude;
+
+    JsonObject firingConfig = towerConfig.readFiringConfig(result);
+    result["firingConfig"] = firingConfig["firingConfig"];
     return result;
 }
 
@@ -252,6 +279,252 @@ JsonObject ignition(JsonObject params)
     result["deviceID"] = deviceID;
     return result;
 }
+
+JsonObject configDeviceInformation(JsonObject params)
+{
+    static DynamicJsonDocument doc(1024); 
+    static DynamicJsonDocument errorDoc(128);
+    int i;
+    String mqttHost, mqttPort, mqttUsername, mqttPassword;
+    String wifiSSID[maxWiFiConfigs], wifiPassword[maxWiFiConfigs];
+    JsonObject error = errorDoc.to<JsonObject>();
+    if (!params.containsKey("way")) {
+        error["error"]["message"] = "参数错误，没有配置读写方式";
+        return error;
+    }
+    String way = params["way"].as<String>();
+    String message;
+    JsonObject result = doc.to<JsonObject>();
+    if (way == "read") {
+        Preferences mqttPreferences;
+        mqttPreferences.begin("mqtt", false);
+        mqttHost = mqttPreferences.getString("host", "");
+        mqttPort = mqttPreferences.getInt("port", 0);
+        mqttUsername = mqttPreferences.getString("username", "");
+        mqttPassword = mqttPreferences.getString("password", "");
+        mqttPreferences.end();
+        
+        Preferences wifiPreferences;
+        wifiPreferences.begin("wifi_config", false);
+        for (i = 0; i < maxWiFiConfigs; i++) {
+            wifiSSID[i] = wifiPreferences.getString(("wifi_" + String(i) + "_ssid").c_str(), "");
+            wifiPassword[i] = wifiPreferences.getString(("wifi_" + String(i) + "_password").c_str(), "");
+        }
+        wifiPreferences.end();
+
+        JsonObject content = result.createNestedObject("content");
+        JsonObject mqttConfig = content.createNestedObject("mqttConfig");
+        mqttConfig["mqttUsername"] = mqttUsername;
+        mqttConfig["mqttPassword"] = mqttPassword;
+        mqttConfig["mqttHost"] = mqttHost;
+        mqttConfig["mqttPort"] = mqttPort;
+
+        JsonArray wifiConfigs = content.createNestedArray("wifiConfigs");
+        for (i = 0; i < maxWiFiConfigs; i++) {
+            if (wifiSSID[i] == "") 
+                continue;
+            JsonObject wifiConfig = wifiConfigs.createNestedObject();
+            wifiConfig["SSID"] = wifiSSID[i];
+            wifiConfig["password"] = wifiPassword[i];
+            wifiConfig["id"] = i;
+        }
+        message = "获取设备信息成功";
+    } else if (way == "write") {
+        if (!params.containsKey("content")) {
+            error["error"]["message"] = "参数错误，没有content参数";
+            return error;
+        }
+        JsonObject content = params["content"];
+        if (content.containsKey("mqttConfig")) {
+            JsonObject mqttConfig = content["mqttConfig"];
+            mqttHost = mqttConfig["mqttHost"].as<String>();
+            mqttPort = mqttConfig["mqttPort"].as<String>();
+            mqttUsername = mqttConfig["mqttUsername"].as<String>();
+            mqttPassword = mqttConfig["mqttPassword"].as<String>();
+            Preferences mqttPreferences;
+            mqttPreferences.begin("mqtt", false);
+            mqttPreferences.putString("host", mqttHost);
+            mqttPreferences.putInt("port", mqttPort.toInt());
+            mqttPreferences.putString("username", mqttUsername);
+            mqttPreferences.putString("password", mqttPassword);
+            mqttPreferences.end();
+        }
+        if (content.containsKey("wifiConfigs")) {
+            JsonArray wifiConfigs = content["wifiConfigs"];
+            for (JsonObject wifiConfig : wifiConfigs) {
+                int number = wifiConfig["id"].as<int>();
+                wifiSSID[number] = wifiConfig["SSID"].as<String>();
+                wifiPassword[number] = wifiConfig["password"].as<String>();
+            }
+            
+            Preferences wifiPreferences;
+            wifiPreferences.begin("wifi_config", false);
+            for (i = 0; i < maxWiFiConfigs; i++) {
+                wifiPreferences.putString((wifiKeyPrefix + String(i) + "_ssid").c_str(), wifiSSID[i]);
+                wifiPreferences.putString((wifiKeyPrefix + String(i) + "_password").c_str(), wifiPassword[i]);
+            }
+            wifiPreferences.end();
+            message = "保存设备信息成功";
+        }
+    }
+    
+    result["message"] = message;
+    result["deviceID"] = deviceID;
+    return result;
+}
+
+JsonObject configFiringInfomation(JsonObject params)
+{
+    static DynamicJsonDocument errorDoc(128);
+    JsonObject errorObj = errorDoc.to<JsonObject>();
+    if (!params.containsKey("way")) {
+        errorObj["error"]["message"] = "参数错误，没有配置读写方式";
+        return errorObj;
+    }
+    String way = params["way"].as<String>();
+    if (way == "read") {
+        return towerConfig.readFiringConfig(params);
+    } else if (way == "write") {
+        return towerConfig.saveFiringConfig(params);
+    } else {
+        errorObj["error"]["message"] = "参数way错误,未定义的方式";
+        return errorObj;
+    }
+}
+
+JsonObject shoot(JsonObject params)
+{
+    static DynamicJsonDocument resultDoc(128); 
+    static DynamicJsonDocument errorDoc(128);
+    JsonObject resultObj = resultDoc.to<JsonObject>();
+    JsonObject errorObj = errorDoc.to<JsonObject>();
+    String message = "";
+    float PTpanAngle;      /* 设备当前水平角度 */
+    float PTtiltAngle;        /* 设备当前垂直角度 */
+    uint32_t lastTime = 0;
+
+    if (!params.containsKey("panAngle") || !params.containsKey("tiltAngle")) {
+        errorObj["error"]["message"] = "参数错误，没有配置方位";
+        return errorObj;
+    }
+
+    /* 装弹 */
+    lastTime = millis();
+    /* 调用0号预设点 */
+    if (!PT.control(12, 0, 0)) {
+        errorObj["error"]["message"] = "调用0号预设点失败，与云台通讯异常";
+        return errorObj;
+    }
+           
+    while (1) {
+        vTaskDelay(pdMS_TO_TICKS(300));
+        PTpanAngle = PT.getPanAngle();
+        PTtiltAngle = PT.getTiltAngle();
+        if ((PTpanAngle > (60.0f - angleAllowsRangeErrors) && PTpanAngle < (60.0f + angleAllowsRangeErrors))
+            && (PTtiltAngle > (360.0f - angleAllowsRangeErrors) || PTtiltAngle < 0.0f + angleAllowsRangeErrors)) {
+            Serial.printf("云台时效内到达装弹位置\n");
+            Serial.printf("到达装弹位置 水平角度：%f,俯仰角度：%f\n", PTpanAngle, PTtiltAngle);
+            break;
+        }
+        if (millis() - lastTime > 10000) {
+            Serial.printf("云台到达装弹位置超时\n");
+            break;
+        }
+    }
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    if (!stepper.load()) {
+        errorObj["error"]["message"] = "无法控制步进电机装弹";
+        return errorObj;
+    }
+    vTaskDelay(pdMS_TO_TICKS(2000));
+
+    float tiltAngle = params["tiltAngle"].as<float>();
+    if (tiltAngle >= 0.0) {
+        tiltAngle /= 2.56f;
+    } else {
+        tiltAngle += 360.0f;
+        tiltAngle /= 2.56f;
+    }
+    int tiltAngleIntegerPart = static_cast<int>(std::floor(tiltAngle));
+    int tiltAngleDecimalPart = static_cast<int>((tiltAngle - tiltAngleIntegerPart) * 100);
+    tiltAngle *= 2.56f;
+    if (!PT.control(21, tiltAngleIntegerPart, tiltAngleDecimalPart)) {
+        errorObj["error"]["message"] = "设置俯仰角度失败，与云台通讯异常";
+        return errorObj;
+    }
+    resultObj["tiltAngleIntegerPart"] = tiltAngleIntegerPart;
+    resultObj["tiltAngleDecimalPart"] = tiltAngleDecimalPart;
+
+    float panAngle = params["panAngle"].as<float>();
+    if (panAngle >= 0.0) {
+        panAngle /= 2.56f;
+    } else {
+        panAngle += 360.0f;
+        panAngle /= 2.56f;
+    }
+    int panAngleIntegerPart = static_cast<int>(std::floor(panAngle));
+    int panAngleDecimalPart = static_cast<int>((panAngle - panAngleIntegerPart) * 100);
+    panAngle *= 2.56;
+    if (!PT.control(20, panAngleIntegerPart, panAngleDecimalPart)) {
+        errorObj["error"]["message"] = "设置水平角度失败，与云台通讯异常";
+        return errorObj;
+    }
+    resultObj["panAngleIntegerPart"] = panAngleIntegerPart;
+    resultObj["panAngleDecimalPart"] = panAngleDecimalPart;
+
+    lastTime = millis();
+    if (params.containsKey("waitTime")) {
+        int waitTime = params["waitTime"].as<int>();
+        vTaskDelay(pdMS_TO_TICKS(waitTime));
+    } else {
+        while (1) {
+            PTpanAngle = PT.getPanAngle();
+            PTtiltAngle = PT.getTiltAngle();
+            Serial.printf("水平角度为%f,俯仰角度为%f\n", PTpanAngle, PTtiltAngle);
+            if ((PTpanAngle > (panAngle - angleAllowsRangeErrors) && PTpanAngle < (panAngle + angleAllowsRangeErrors))
+                && (PTtiltAngle > (tiltAngle - angleAllowsRangeErrors) && PTtiltAngle < (tiltAngle + angleAllowsRangeErrors))) {
+                Serial.printf("击发角度调整正常\n");
+                vTaskDelay(pdMS_TO_TICKS(100));
+                break;
+            }
+            if (millis() - lastTime > 10000) {
+                Serial.printf("云台击发调整角度超时\n");
+                break;
+            }
+            vTaskDelay(pdMS_TO_TICKS(300));
+        }
+    }
+
+    if (params.containsKey("ignitionTime")) {
+        int ignitionTime = params["ignitionTime"].as<int>();
+        digitalWrite(ignitionPin, ignitionPinValidBit);
+        vTaskDelay(pdMS_TO_TICKS(ignitionTime));
+        digitalWrite(ignitionPin, !ignitionPinValidBit);
+        message += "点火" + String(ignitionTime) + "ms；";
+    } else {
+        message += "无点火时间参数；";
+    }
+    vTaskDelay(pdMS_TO_TICKS(500));
+    if (params.containsKey("cleanTime")) {
+        int cleanTime = params["cleanTime"].as<int>();
+        digitalWrite(cleanBarrelPin, cleanBarrelPinValidBit);
+        vTaskDelay(pdMS_TO_TICKS(cleanTime));
+        digitalWrite(cleanBarrelPin, !cleanBarrelPinValidBit);
+        message += "清理炮管" + String(cleanTime) + "ms；";
+    } else {
+        message += "无清理炮管时间参数；";
+    }
+    
+    /* 调用250号预设点 */
+    if (!PT.control(12, 0, 250)) {
+        errorObj["error"]["message"] = "调用250号预设点失败，与云台通讯异常";
+        return errorObj;
+    }
+    message += "运行成功！";
+    resultObj["message"] = message;
+    return resultObj;
+}
+
 
 // JsonObject setAngleReturn(JsonObject params)
 // {
