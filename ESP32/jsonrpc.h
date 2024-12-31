@@ -13,8 +13,6 @@ struct jrpcProcedure {
 	void *data;
 };
 
-
-
 class jsonrpc {
 public:
     jsonrpc(void);

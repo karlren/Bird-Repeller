@@ -29,9 +29,6 @@ bool jsonrpc::jsonParse(DynamicJsonDocument& doc, String source)
     }
     if (doc.containsKey("id")) {
         id = doc["id"].as<int>();
-        Serial.printf("id为%d\n", id);
-    } else {
-        Serial.printf("无任务ID数据\n");
     }
     /* 判断键deviceID是否存在 */
     if (!doc.containsKey("deviceID") && source == "mqtt") {
@@ -59,13 +56,14 @@ bool jsonrpc::jsonParse(DynamicJsonDocument& doc, String source)
     JsonVariant jsonVarmethod = doc["method"];
     if (jsonVarmethod.is<String>()) {
         String method = jsonVarmethod.as<String>();
-        // Serial.printf("method = %s\n", method.c_str());
+        Serial.printf("method = %s ,id = %d\n", method.c_str(), id);
         for (i = 0; i < procedureCount; i++) {
             if (strcmp(procedures[i].name, method.c_str()) == 0) {
                 JsonObject result = procedures[i].function(params);
                 if (id != 0) {
                     result["id"] = id;
                 }
+                result["deviceID"] = deviceID;
                 sendResult(result, source, id);
                 break;
             }
