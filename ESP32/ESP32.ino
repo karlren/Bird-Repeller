@@ -46,20 +46,27 @@ void loop() {
 void LED_Task(void *parameter) 
 {
     pinMode(LED_PIN, OUTPUT);
-    while (WiFi.status() != WL_CONNECTED) {
-        vTaskDelay(pdMS_TO_TICKS(200)); // 防止任务占用过多 CPU
-    }
+    int lastStatus = WiFi.status();
     while (1) {
-        if (WiFi.status() == WL_CONNECTED) {
+        if (WiFi.status() == WL_CONNECTED) {    // 3
             digitalWrite(LED_PIN, HIGH);
             vTaskDelay(pdMS_TO_TICKS(500));
             digitalWrite(LED_PIN, LOW);
             vTaskDelay(pdMS_TO_TICKS(300));
+        } else if (WiFi.status() == WL_IDLE_STATUS) {
+            digitalWrite(LED_PIN, HIGH);
+            vTaskDelay(pdMS_TO_TICKS(300));
+            digitalWrite(LED_PIN, LOW);
+            vTaskDelay(pdMS_TO_TICKS(700));
         } else {
             digitalWrite(LED_PIN, HIGH);
             vTaskDelay(pdMS_TO_TICKS(100));
             digitalWrite(LED_PIN, LOW);
             vTaskDelay(pdMS_TO_TICKS(100));
+        }
+        if (WiFi.status() != lastStatus) {
+            Serial.printf("当前网络状态：%d\n", WiFi.status());
+            lastStatus = WiFi.status();
         }
         
         Stack_Debug();
