@@ -25,7 +25,7 @@ bool PanTilt::control(byte command, byte param1, byte param2)
     String commandAttribute;
 
     // 获取锁
-    if (xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) {
+    if (xSemaphoreTake(mutex, 1000) != pdTRUE) {
         Serial.println("无法获取互斥锁");
         free(SendCommand);
         free(receivedData);
