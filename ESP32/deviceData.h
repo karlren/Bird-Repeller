@@ -6,4 +6,5 @@
 extern int deviceID;
 extern int currentmajor, currentminor, currentpatch;
 
+
 #endif

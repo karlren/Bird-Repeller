@@ -3,26 +3,37 @@
 #include "jsonrpc.h"
 #include "mqtt.h"
 #include "Task.h"
+#include "TowerConfig.h"
 
+/* 角度误差允许范围 */
+float angleAllowsRangeErrors = 3.0f;
 
 /* 装弹步进电机相关IO口 */
-const int stepPin = 4;
-const int dirPin = 5;
-const int resetPin = 12;
-const int shellDetPin = 13;
+const int stepPin = 4;      /* 装弹步进电机驱动IO口 */
+const int dirPin = 5;       /* 装弹步进电机方向IO口 */
+const int resetPin = 23;    /* 装弹步进电机复位IO口 */
+const int shellDetPin = 13; /* 装弹空弹检测IO口 */
 
-/* 点火击发IO口 */
-const int IgnitionPin = 11; /* 未确定 */
+/* 点火 */
+const int ignitionPin = 27;         /* 点火击发IO口 */
+SemaphoreHandle_t ignitionMutex;    /* 点火击发互斥锁句柄  */ 
+int ignitionPinValidBit = HIGH;      /* 点火开关IO引脚有效位 */
+
+/* 清理炮管气泵 */
+const int cleanBarrelPin = 12;      /* 清理炮管气泵IO口 */
+SemaphoreHandle_t cleanBarrelMutex; /* 清理炮管气泵互斥锁句柄 */ 
+int cleanBarrelPinValidBit = LOW;  /* 气泵IO引脚有效位 */
 
 Preferences devicePreferences;
 
-PanTilt PT(18, 19);
+PanTilt PT(19, 18);
 MyStepper stepper(stepPin, dirPin, resetPin, shellDetPin);
 TowerConfig towerConfig("/tower_config.json");
 
 // TimerHandle_t angleReturnTimer;               /*角度回传的定时器*/
 
 void GetDeviceData(void);
+JsonObject reset(JsonObject params);
 JsonObject PanTiltControl(JsonObject params);
 JsonObject getPTAngle(JsonObject params);
 JsonObject Stepperload(JsonObject params);
@@ -30,11 +41,16 @@ JsonObject StepperHoming(JsonObject params);
 JsonObject getDeviceData(JsonObject params);
 JsonObject loading(JsonObject params);
 JsonObject changeDeviceID(JsonObject params);
+JsonObject ignition(JsonObject params);
+JsonObject cleanBarrel(JsonObject params);
+JsonObject configDeviceInformation(JsonObject params);
+JsonObject configFiringInfomation(JsonObject params);
+JsonObject shoot(JsonObject params);
 
 bool deviceInit(void)
 {
     PT.begin(9600);
-towerConfig.begin();
+    towerConfig.begin();
     GetDeviceData();
     ignitionMutex = xSemaphoreCreateMutex();
     cleanBarrelMutex = xSemaphoreCreateMutex();
@@ -68,6 +84,22 @@ towerConfig.begin();
     if (!rpc.registerProcedure(changeDeviceID, "changeDeviceID")) {
         Serial.println("函数changeDeviceID注册失败");
     }
+    if (!rpc.registerProcedure(ignition, "ignition")) {
+        Serial.println("函数ignition注册失败");
+    }
+    if (!rpc.registerProcedure(cleanBarrel, "cleanBarrel")) {
+        Serial.println("函数cleanBarrel注册失败");
+    }
+    if (!rpc.registerProcedure(configDeviceInformation, "configDeviceInformation")) {
+        Serial.println("函数configDeviceInformation注册失败");
+    }
+    if (!rpc.registerProcedure(configFiringInfomation, "configFiringInfomation")) {
+        Serial.println("函数configFiringInfomation注册失败");
+    }
+    if (!rpc.registerProcedure(shoot, "shoot")) {
+        Serial.println("函数shoot注册失败");
+    }
+    
     // stepper.Init();
     return true;
 }
@@ -80,6 +112,14 @@ void GetDeviceData(void)
     } else {
         devicePreferences.putInt("deviceID", deviceID);
     }
+}
+
+JsonObject reset(JsonObject params)
+{
+    static DynamicJsonDocument resultDoc(128); 
+    ESP.restart(); // 执行重启
+    JsonObject resultObj = resultDoc.to<JsonObject>();
+    return resultObj;
 }
 
 JsonObject PanTiltControl(JsonObject params)
@@ -128,7 +168,7 @@ JsonObject getPTAngle(JsonObject params)
 
     panAngle = PT.getPanAngle();
 
-    if (panAngle == NAN) {
+    if (panAngle != panAngle) {
         JsonObject error = errorDoc.to<JsonObject>();
         error["error"]["message"] = "与云台通讯异常";
         return error;
@@ -150,7 +190,7 @@ JsonObject Stepperload(JsonObject params)
 {
     static DynamicJsonDocument doc(128); 
     static DynamicJsonDocument errorDoc(128);
-    if (stepper.load()) {
+    if (!stepper.load()) {
         JsonObject error = errorDoc.to<JsonObject>();
         // error["error"]["message"] = "Stepper motor loading failure";
         error["error"]["message"] = "无法控制步进电机装弹";
@@ -168,7 +208,7 @@ JsonObject StepperHoming(JsonObject params)
 {
     static DynamicJsonDocument doc(128); 
     static DynamicJsonDocument errorDoc(128);
-    if (stepper.load()) {
+    if (!stepper.Init()) {
         JsonObject error = errorDoc.to<JsonObject>();
         // error["error"]["message"] = "Stepper motor Homing failure";
         error["error"]["message"] = "无法控制步进电机复位";
@@ -198,7 +238,7 @@ JsonObject getDeviceData(JsonObject params)
     result["IP"] = WiFi.localIP().toString();
     result["edition"] = String(currentmajor) + "." + String(currentminor) + "." + String(currentpatch);
     result["deviceID"] = deviceID;
-result["location"]["latitude"] = latitude;
+    result["location"]["latitude"] = latitude;
     result["location"]["longitude"] = longitude;
     result["location"]["altitude"] = altitude;
 
@@ -212,33 +252,41 @@ JsonObject loading(JsonObject params)
     static DynamicJsonDocument doc(128); 
     static DynamicJsonDocument errorDoc(128);
     uint32_t lastTime = millis();
-    PT.control(12, 0, 0);       /* 调用0号预设点 */
+    /* 调用0号预设点 */
+    if (!PT.control(12, 0, 0)) {
+        JsonObject error = errorDoc.to<JsonObject>();
+        error["error"]["message"] = "与云台通讯异常";
+        return error;
+    }
+           
     while (1) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskDelay(pdMS_TO_TICKS(100));
         float panAngle;      /* 水平角度 */
         float tiltAngle;        /* 垂直角度 */
         panAngle = PT.getPanAngle();
         tiltAngle = PT.getTiltAngle();
-        if (panAngle > 59.5f && panAngle < 60.5f
-            && (tiltAngle > 359.5f || tiltAngle < 0.5f)) {
+        if (((panAngle > 58.0f && panAngle < 62.0f) || (panAngle < 2.0f || panAngle > 358.0f))
+            && (tiltAngle > 358.0f || tiltAngle < 2.0f)) {
+            vTaskDelay(pdMS_TO_TICKS(100));
             break;
         }
-        if (millis() - lastTime > 5000) {  /* 如果超过5秒还没移动结束就报错 */
-            JsonObject error = errorDoc.to<JsonObject>();
-            error["error"]["message"] = "云台移动超时或与云台通讯异常";
-            return error;
+        if (millis() - lastTime > 5000) {
+            // JsonObject error = errorDoc.to<JsonObject>();
+            // error["error"]["message"] = "云台移动超时";
+            // return error;
+            break;
         }
     }
-    if (stepper.load()) {
-        JsonObject result = doc.to<JsonObject>();
-        result["message"] = "loaded";
-        return result;
-    } else {
+    if (!stepper.load()) {
         JsonObject error = errorDoc.to<JsonObject>();
         // error["error"]["message"] = "Stepper motor loading failure";
         error["error"]["message"] = "无法控制步进电机装弹";
         return error;
     }
+    JsonObject result = doc.to<JsonObject>();
+    // result["message"] = "loaded";
+    result["message"] = "装弹成功";
+    return result;
 }
 
 JsonObject changeDeviceID(JsonObject params)
@@ -268,12 +316,42 @@ JsonObject ignition(JsonObject params)
 {
     static DynamicJsonDocument doc(128); 
     static DynamicJsonDocument errorDoc(128);
-    pinMode(IgnitionPin, OUTPUT);
+    
+    // 获取互斥锁
+    if (xSemaphoreTake(ignitionMutex, 0) != pdTRUE) {
+        JsonObject error = errorDoc.to<JsonObject>();
+        error["error"]["message"] = "点火中。。";
+        return error; 
+    }
     // String message = "The ignition was successful";
-    String message = "装弹成功";
-    digitalWrite(IgnitionPin, LOW);
+    String message = "设备" + String(deviceID) +"点火成功";
+    digitalWrite(ignitionPin, ignitionPinValidBit);
     vTaskDelay(pdMS_TO_TICKS(1000));
-    digitalWrite(IgnitionPin, HIGH);
+    digitalWrite(ignitionPin, !ignitionPinValidBit);
+    xSemaphoreGive(ignitionMutex);
+    JsonObject result = doc.to<JsonObject>();
+    result["message"] = message;
+    result["deviceID"] = deviceID;
+    return result;
+}
+
+/* 清理炮管函数，未测试 */
+JsonObject cleanBarrel(JsonObject params)
+{
+    static DynamicJsonDocument doc(128); 
+    static DynamicJsonDocument errorDoc(128);
+    // 获取互斥锁
+    if (xSemaphoreTake(cleanBarrelMutex, 0) != pdTRUE) {
+        JsonObject error = errorDoc.to<JsonObject>();
+        error["error"]["message"] = "当前正在清理炮管";
+        return error; 
+    }
+    // String message = "Clean barrel successful";
+    String message = "设备" + String(deviceID) +"清理炮管成功";
+    digitalWrite(cleanBarrelPin, cleanBarrelPinValidBit);
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    digitalWrite(cleanBarrelPin, !cleanBarrelPinValidBit);
+    xSemaphoreGive(cleanBarrelMutex);
     JsonObject result = doc.to<JsonObject>();
     result["message"] = message;
     result["deviceID"] = deviceID;
